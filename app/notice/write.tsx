@@ -52,7 +52,7 @@ export default function NoticeWriteScreen() {
  
   return (
     <SafeAreaView style={styles.safe}>
-      {/* (1) 아이덴티티: 학생회 + 학번 */}
+      {/* (1) 아이덴티티: 학생회 + 학dla번 */}
       <View style={styles.identityWrap}>
         <View style={styles.identity}>
           <View style={styles.badge}>
