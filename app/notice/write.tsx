@@ -48,8 +48,8 @@ export default function NoticeWriteScreen() {
       const msg = e?.response?.data?.message || e?.message || '요청 실패';
       Alert.alert('실패', String(msg));
     }
-  };
-
+  };  
+ 
   return (
     <SafeAreaView style={styles.safe}>
       {/* (1) 아이덴티티: 학생회 + 학번 */}
