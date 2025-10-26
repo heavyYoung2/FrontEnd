@@ -1,3 +1,4 @@
+// app/notice/calendar.tsx
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -8,19 +9,11 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Calendar } from 'react-native-calendars';
+import { Calendar, DateObject } from 'react-native-calendars';
 import { addDays, endOfMonth, format, startOfMonth } from 'date-fns';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getAdminEvents, AdminEventInfo } from '../../src/api/adminEvents';
-
-type DateObject = {
-  dateString: string; // "2025-10-01"
-  day: number;
-  month: number;
-  year: number;
-  timestamp: number;
-};
 
 const COLORS = {
   primary: '#2E46F0',
@@ -29,18 +22,21 @@ const COLORS = {
   border: '#E6E8EE',
   surface: '#FFFFFF',
   bg: '#F5F7FA',
-  pill: '#A7D7A7', // 달력 녹색 바 색
+  pill: '#9FE29F', // 기간 바 색
 };
 
 type Marked = {
   [date: string]: {
+    selected?: boolean;
+    selectedColor?: string;
+    selectedTextColor?: string;
     periods?: { startingDay?: boolean; endingDay?: boolean; color: string }[];
   };
 };
 
-function ymd(d: Date) { return format(d, 'yyyy-MM-dd'); }
+const ymd = (d: Date) => format(d, 'yyyy-MM-dd');
 
-/** 날짜 문자열 ymd 사이의 모든 날짜를 배열로 반환 */
+/** start~end 사이의 모든 ymd 날짜 배열 */
 function eachDay(startYmd: string, endYmd: string): string[] {
   const s = new Date(startYmd);
   const e = new Date(endYmd);
@@ -53,11 +49,12 @@ export default function CouncilCalendarScreen() {
   const router = useRouter();
 
   const [month, setMonth] = useState<Date>(new Date());
+  const [selected, setSelected] = useState<string>(ymd(new Date())); // 기본=오늘
   const [loading, setLoading] = useState(false);
   const [events, setEvents] = useState<AdminEventInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  /** 월이 바뀔 때마다 서버에서 해당 월 범위로 조회 */
+  /** 월 변경 시 서버 조회 */
   const load = useCallback(async (base: Date) => {
     try {
       setLoading(true);
@@ -76,52 +73,80 @@ export default function CouncilCalendarScreen() {
 
   React.useEffect(() => { load(month); }, [load, month]);
 
-  /** react-native-calendars 멀티-기간 마킹 데이터 구성 */
+  /** 캘린더 마킹 (기간 + 선택일 하이라이트) */
   const markedDates: Marked = useMemo(() => {
     const map: Marked = {};
-    events.forEach((ev, idx) => {
-      const color = COLORS.pill; // 필요하면 인덱스로 색 다양화
+
+    // 기간 바
+    events.forEach((ev) => {
       const days = eachDay(ev.eventStartDate, ev.eventEndDate);
       days.forEach((d, i) => {
         const isStart = i === 0;
         const isEnd = i === days.length - 1;
         if (!map[d]) map[d] = { periods: [] };
         map[d].periods!.push({
-          color,
+          color: COLORS.pill,
           ...(isStart ? { startingDay: true } : {}),
           ...(isEnd ? { endingDay: true } : {}),
         });
       });
     });
-    return map;
-  }, [events]);
 
-  const monthStr = useMemo(() => format(month, 'yyyy년 MM월'), [month]);
+    // 선택일 표시
+    if (selected) {
+      map[selected] = {
+        ...(map[selected] || {}),
+        selected: true,
+        selectedColor: '#E8EDFF',
+        selectedTextColor: COLORS.text,
+      };
+    }
+
+    return map;
+  }, [events, selected]);
+
+  /** 선택된 날짜에 해당하는 이벤트들만 필터 */
+  const filtered = useMemo(() => {
+    if (!selected) return [];
+    return events.filter(
+      (ev) => ev.eventStartDate <= selected && selected <= ev.eventEndDate
+    );
+  }, [events, selected]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }}>
-      {/* 상단 헤더 (공통: 학생회 뱃지 + 학번 + 타이틀 + 뒤로가기) */}
-      <View style={styles.headerWrap}>
-        <View style={styles.topRow}>
-          <Pressable onPress={() => router.back()} hitSlop={10} style={{ paddingRight: 4 }}>
-            <Ionicons name="chevron-back" size={22} color={COLORS.text} />
-          </Pressable>
-          <Text style={styles.title}>달력</Text>
-        </View>
-
+      {/* 최상단: 학생회 태그 + 학번 */}
+      <View style={styles.identityWrap}>
         <View style={styles.identity}>
           <View style={styles.badge}><Text style={styles.badgeText}>학생회</Text></View>
           <Text style={styles.studentId}>C123456</Text>
         </View>
       </View>
 
+      {/* 헤더: 뒤로가기 + 중앙 타이틀 */}
+      <View style={styles.headerWrap}>
+        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={22} color={COLORS.text} />
+        </Pressable>
+        <Text style={styles.headerTitle}>달력</Text>
+        <View style={{ width: 22 }} />
+      </View>
+
       {/* 달력 카드 */}
       <View style={styles.card}>
         <Calendar
-          // 여러 기간을 같은 날짜에 겹칠 수 있게
           markingType="multi-period"
           markedDates={markedDates}
           current={ymd(month)}
+          onDayPress={(d: DateObject) => {
+            setSelected(d.dateString);
+            // 월 스와이프 없이 날짜만 바꿔도 다른 월이면 월 동기화
+            const clickedMonth = new Date(d.year, d.month - 1, 1);
+            if (clickedMonth.getMonth() !== month.getMonth() ||
+                clickedMonth.getFullYear() !== month.getFullYear()) {
+              setMonth(clickedMonth);
+            }
+          }}
           onMonthChange={(m: DateObject) => {
             const d = new Date(m.year, m.month - 1, 1);
             setMonth(d);
@@ -137,26 +162,42 @@ export default function CouncilCalendarScreen() {
         />
       </View>
 
-      {/* 목록 */}
+      {/* 선택된 날짜의 리스트 */}
       <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 8 }}>
         <View style={styles.listCard}>
+          <Text style={styles.listHeader}>
+            {selected ? format(new Date(selected), 'yyyy년 M월 d일') : '날짜 선택'}
+          </Text>
+
           {loading ? (
-            <View style={{ padding: 24, alignItems: 'center' }}>
+            <View style={{ paddingVertical: 24, alignItems: 'center' }}>
               <ActivityIndicator color={COLORS.primary} />
             </View>
           ) : error ? (
-            <Text style={{ color: '#DC2626' }}>{error}</Text>
-          ) : events.length === 0 ? (
-            <Text style={{ color: COLORS.muted, padding: 12 }}>해당 월에 등록된 일정이 없습니다.</Text>
+            <Text style={{ color: '#DC2626', paddingVertical: 12 }}>{error}</Text>
+          ) : filtered.length === 0 ? (
+            <Text style={{ color: COLORS.muted, paddingVertical: 12 }}>
+              공지사항이 없습니다.
+            </Text>
           ) : (
-            events.map((ev) => (
-              <View key={ev.eventId} style={styles.itemRow}>
+            filtered.map((ev) => (
+              <Pressable
+                key={ev.eventId}
+                onPress={() => router.push(`/notice/${ev.eventId}`)}
+                style={({ pressed }) => [
+                  styles.itemRow,
+                  pressed && { opacity: 0.95 },
+                ]}
+              >
                 <View style={styles.dot} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.itemTitle}>{ev.title}</Text>
-                  <Text style={styles.itemSub}>{`${ev.eventStartDate} ~ ${ev.eventEndDate}`}</Text>
+                  <Text style={styles.itemSub}>
+                    {ev.eventStartDate} ~ {ev.eventEndDate}
+                  </Text>
                 </View>
-              </View>
+                <Ionicons name="chevron-forward" size={18} color="#9AA0A6" />
+              </Pressable>
             ))
           )}
         </View>
@@ -166,26 +207,77 @@ export default function CouncilCalendarScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerWrap: { backgroundColor: COLORS.surface, paddingHorizontal: 16, paddingBottom: 10 },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  title: { textAlign: 'center', paddingVertical: 8, color: COLORS.text, fontSize: 18, fontFamily: 'Pretendard-SemiBold' },
-  identity: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
-  badge: { backgroundColor: COLORS.primary, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  // 최상단 아이덴티티
+  identityWrap: {
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderColor: COLORS.border,
+  },
+  identity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  badge: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
   badgeText: { color: '#fff', fontSize: 12, fontFamily: 'Pretendard-SemiBold' },
   studentId: { color: COLORS.text, fontSize: 14, fontFamily: 'Pretendard-Medium' },
 
-  card: {
-    marginHorizontal: 16, marginTop: 12,
-    borderRadius: 12, borderWidth: 1, borderColor: COLORS.border,
-    backgroundColor: COLORS.surface, overflow: 'hidden',
+  // 헤더
+  headerWrap: {
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backBtn: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontFamily: 'Pretendard-SemiBold',
+    textAlign: 'center',
   },
 
+  // 달력 카드
+  card: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    overflow: 'hidden',
+  },
+
+  // 리스트 카드
   listCard: {
-    borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
     padding: 12,
   },
-  itemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
-  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#9FE29F' },
+  listHeader: {
+    fontFamily: 'Pretendard-SemiBold',
+    color: COLORS.text,
+    fontSize: 16,
+    marginBottom: 6,
+  },
+  itemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+  },
+  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.pill },
   itemTitle: { color: COLORS.text, fontFamily: 'Pretendard-SemiBold', fontSize: 15, marginBottom: 2 },
   itemSub: { color: COLORS.muted, fontFamily: 'Pretendard-Medium', fontSize: 12 },
 });
