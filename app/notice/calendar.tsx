@@ -9,7 +9,17 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Calendar, DateObject } from 'react-native-calendars';
+import { useFocusEffect } from '@react-navigation/native';
+
+type RNCalDateObject = {
+  dateString: string;
+  day: number;
+  month: number;
+  year: number;
+  timestamp: number;
+};
+
+import { Calendar } from 'react-native-calendars';
 import { addDays, endOfMonth, format, startOfMonth } from 'date-fns';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,7 +32,7 @@ const COLORS = {
   border: '#E6E8EE',
   surface: '#FFFFFF',
   bg: '#F5F7FA',
-  pill: '#9FE29F', // 기간 바 색
+  pill: '#9FE29F',
 };
 
 type Marked = {
@@ -36,7 +46,6 @@ type Marked = {
 
 const ymd = (d: Date) => format(d, 'yyyy-MM-dd');
 
-/** start~end 사이의 모든 ymd 날짜 배열 */
 function eachDay(startYmd: string, endYmd: string): string[] {
   const s = new Date(startYmd);
   const e = new Date(endYmd);
@@ -49,12 +58,11 @@ export default function CouncilCalendarScreen() {
   const router = useRouter();
 
   const [month, setMonth] = useState<Date>(new Date());
-  const [selected, setSelected] = useState<string>(ymd(new Date())); // 기본=오늘
+  const [selected, setSelected] = useState<string>(ymd(new Date()));
   const [loading, setLoading] = useState(false);
   const [events, setEvents] = useState<AdminEventInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  /** 월 변경 시 서버 조회 */
   const load = useCallback(async (base: Date) => {
     try {
       setLoading(true);
@@ -71,13 +79,19 @@ export default function CouncilCalendarScreen() {
     }
   }, []);
 
+  // 최초 로딩
   React.useEffect(() => { load(month); }, [load, month]);
 
-  /** 캘린더 마킹 (기간 + 선택일 하이라이트) */
+  // ✅ 이게 핵심: 화면이 다시 보일 때마다 새로고침
+  useFocusEffect(
+    React.useCallback(() => {
+      load(month);
+      return undefined;
+    }, [load, month])
+  );
+
   const markedDates: Marked = useMemo(() => {
     const map: Marked = {};
-
-    // 기간 바
     events.forEach((ev) => {
       const days = eachDay(ev.eventStartDate, ev.eventEndDate);
       days.forEach((d, i) => {
@@ -91,8 +105,6 @@ export default function CouncilCalendarScreen() {
         });
       });
     });
-
-    // 선택일 표시
     if (selected) {
       map[selected] = {
         ...(map[selected] || {}),
@@ -101,11 +113,9 @@ export default function CouncilCalendarScreen() {
         selectedTextColor: COLORS.text,
       };
     }
-
     return map;
   }, [events, selected]);
 
-  /** 선택된 날짜에 해당하는 이벤트들만 필터 */
   const filtered = useMemo(() => {
     if (!selected) return [];
     return events.filter(
@@ -138,16 +148,17 @@ export default function CouncilCalendarScreen() {
           markingType="multi-period"
           markedDates={markedDates}
           current={ymd(month)}
-          onDayPress={(d: DateObject) => {
+          onDayPress={(d: RNCalDateObject) => {
             setSelected(d.dateString);
-            // 월 스와이프 없이 날짜만 바꿔도 다른 월이면 월 동기화
             const clickedMonth = new Date(d.year, d.month - 1, 1);
-            if (clickedMonth.getMonth() !== month.getMonth() ||
-                clickedMonth.getFullYear() !== month.getFullYear()) {
+            if (
+              clickedMonth.getMonth() !== month.getMonth() ||
+              clickedMonth.getFullYear() !== month.getFullYear()
+            ) {
               setMonth(clickedMonth);
             }
           }}
-          onMonthChange={(m: DateObject) => {
+          onMonthChange={(m: RNCalDateObject) => {
             const d = new Date(m.year, m.month - 1, 1);
             setMonth(d);
           }}
@@ -184,10 +195,7 @@ export default function CouncilCalendarScreen() {
               <Pressable
                 key={ev.eventId}
                 onPress={() => router.push(`/notice/${ev.eventId}`)}
-                style={({ pressed }) => [
-                  styles.itemRow,
-                  pressed && { opacity: 0.95 },
-                ]}
+                style={({ pressed }) => [styles.itemRow, pressed && { opacity: 0.95 }]}
               >
                 <View style={styles.dot} />
                 <View style={{ flex: 1 }}>
@@ -207,7 +215,6 @@ export default function CouncilCalendarScreen() {
 }
 
 const styles = StyleSheet.create({
-  // 최상단 아이덴티티
   identityWrap: {
     backgroundColor: COLORS.surface,
     borderBottomWidth: 1,
@@ -220,16 +227,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
-  badge: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
+  badge: { backgroundColor: COLORS.primary, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   badgeText: { color: '#fff', fontSize: 12, fontFamily: 'Pretendard-SemiBold' },
   studentId: { color: COLORS.text, fontSize: 14, fontFamily: 'Pretendard-Medium' },
 
-  // 헤더
   headerWrap: {
     backgroundColor: COLORS.surface,
     paddingHorizontal: 16,
@@ -239,14 +240,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   backBtn: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: {
-    color: COLORS.text,
-    fontSize: 18,
-    fontFamily: 'Pretendard-SemiBold',
-    textAlign: 'center',
-  },
+  headerTitle: { color: COLORS.text, fontSize: 18, fontFamily: 'Pretendard-SemiBold', textAlign: 'center' },
 
-  // 달력 카드
   card: {
     marginHorizontal: 16,
     marginTop: 12,
@@ -257,26 +252,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
 
-  // 리스트 카드
   listCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
-    padding: 12,
+    borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, padding: 12,
   },
-  listHeader: {
-    fontFamily: 'Pretendard-SemiBold',
-    color: COLORS.text,
-    fontSize: 16,
-    marginBottom: 6,
-  },
-  itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 12,
-  },
+  listHeader: { fontFamily: 'Pretendard-SemiBold', color: COLORS.text, fontSize: 16, marginBottom: 6 },
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 },
   dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.pill },
   itemTitle: { color: COLORS.text, fontFamily: 'Pretendard-SemiBold', fontSize: 15, marginBottom: 2 },
   itemSub: { color: COLORS.muted, fontFamily: 'Pretendard-Medium', fontSize: 12 },

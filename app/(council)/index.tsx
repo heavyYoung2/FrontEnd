@@ -1,4 +1,5 @@
 // app/(council)/(tabs)/index.tsx
+import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,7 +14,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { getAdminEvents, AdminEventInfo, toYMDfromDateTime } from '../../../src/api/adminEvents';
+import {
+  getAdminEvents,
+  AdminEventInfo,
+  toYMDfromDateTime,
+} from '../../src/api/adminEvents';
 
 const COLORS = {
   primary: '#2E46F0',
@@ -35,8 +40,7 @@ export default function CouncilHome() {
   const fetchList = useCallback(async () => {
     try {
       setLoading(true);
-      // 기간필터 필요하면 getAdminEvents({ from:'2025-10-01', to:'2025-10-31' })
-      const data = await getAdminEvents();
+      const data = await getAdminEvents(); // 필요시 {from,to}
       setList(data);
     } catch (e) {
       console.warn('[getAdminEvents] fail', e);
@@ -45,22 +49,34 @@ export default function CouncilHome() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchList();
-  }, [fetchList]);
-
   const onRefresh = useCallback(async () => {
-    setRefreshing(true);
     try {
-      setList(await getAdminEvents());
+      setRefreshing(true);
+      const data = await getAdminEvents();
+      setList(data);
+    } catch (e) {
+      console.warn('[refresh getAdminEvents] fail', e);
     } finally {
       setRefreshing(false);
     }
   }, []);
 
+  // 화면 복귀 시마다 갱신
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchList();
+      return undefined;
+    }, [fetchList]),
+  );
+
+  // 최초 1회 로딩
+  useEffect(() => {
+    fetchList();
+  }, [fetchList]);
+
   const renderItem = ({ item }: { item: AdminEventInfo }) => (
     <Pressable
-      onPress={() => router.push(`/notice/${item.eventId}`)} // 상세 재사용(관리자 상세가 따로면 그 경로로)
+      onPress={() => router.push(`/notice/${item.eventId}`)}
       style={({ pressed }) => [styles.row, pressed && { opacity: 0.95 }]}
     >
       <View style={{ flex: 1 }}>
@@ -108,6 +124,7 @@ export default function CouncilHome() {
           </View>
         ) : (
           <FlatList
+            style={{ flex: 1 }}                      // ⬅️ 리스트가 남은 영역을 채우도록
             data={list}
             keyExtractor={(it) => String(it.eventId)}
             renderItem={renderItem}
@@ -115,7 +132,10 @@ export default function CouncilHome() {
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
             }
-            contentContainerStyle={{ paddingVertical: 6 }}
+            contentContainerStyle={{
+              paddingVertical: 6,
+              paddingBottom: 120,                   // ⬅️ 탭/플로팅 버튼에 가리지 않게 여백
+            }}
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={
               <View style={{ paddingVertical: 28 }}>
@@ -132,19 +152,43 @@ export default function CouncilHome() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
 
-  headerWrap: { paddingHorizontal: 16, paddingBottom: 8, paddingTop: 4, backgroundColor: COLORS.surface },
+  headerWrap: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    paddingTop: 4,
+    backgroundColor: COLORS.surface,
+  },
   identity: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  badge: { backgroundColor: COLORS.primary, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  badge: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
   badgeText: { color: '#fff', fontSize: 12, fontFamily: 'Pretendard-SemiBold' },
   studentId: { color: COLORS.text, fontSize: 14, fontFamily: 'Pretendard-Medium' },
 
-  title: { textAlign: 'center', marginTop: 10, marginBottom: 10, color: COLORS.text, fontSize: 16, fontFamily: 'Pretendard-SemiBold' },
+  title: {
+    textAlign: 'center',
+    marginTop: 10,
+    marginBottom: 10,
+    color: COLORS.text,
+    fontSize: 16,
+    fontFamily: 'Pretendard-SemiBold',
+  },
 
-  rightLinks: { position: 'absolute', right: 16, bottom: 12, flexDirection: 'row', gap: 16 },
+  rightLinks: {
+    position: 'absolute',
+    right: 16,
+    bottom: 12,
+    flexDirection: 'row',
+    gap: 16,
+  },
   linkBtn: { paddingVertical: 4 },
   linkText: { fontSize: 12, color: '#6B7280', fontFamily: 'Pretendard-Medium' },
 
   card: {
+    flex: 1,                                   // ⬅️ 헤더 아래 남은 공간을 차지(스크롤 가능)
     marginHorizontal: 12,
     marginTop: 8,
     borderRadius: 12,

@@ -1,8 +1,8 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import AppHeader from '../../../src/components/AppHeader';
-import { COLORS } from '../../../src/design/colors';
-import { TYPO } from '../../../src/design/typography';
+import AppHeader from '../../src/components/AppHeader';
+import { COLORS } from '../../src/design/colors';
+import { TYPO } from '../../src/design/typography';
 
 export default function QrTab() {
   return (

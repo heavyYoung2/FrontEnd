@@ -52,3 +52,20 @@ export async function getAdminEventDetail(eventId: number) {
   return data.result;
 }
 
+// 수정
+export type UpdateAdminEventReq = {
+  title: string;
+  content: string;
+  eventStartDate?: string; // yyyy-MM-dd
+  eventEndDate?: string;   // yyyy-MM-dd
+};
+export async function updateAdminEvent(id: number, payload: UpdateAdminEventReq) {
+  const { data } = await api.put(`/admin/events/${id}`, payload);
+  return data.result as { eventId: number };
+}
+
+// 삭제
+export async function deleteAdminEvent(id: number) {
+  await api.delete(`/admin/events/${id}`);
+}
+

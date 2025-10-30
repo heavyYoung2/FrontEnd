@@ -2,7 +2,7 @@
 // 설명: Expo + React Navigation Bottom Tabs 기본 탭 네비게이션 설정
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+//import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 // Expo에 내장된 아이콘 (설치 불필요)
 import { Ionicons } from '@expo/vector-icons';
 
@@ -14,7 +14,7 @@ import LockerScreen from './src/screens/LockerScreen';
 import MyPageScreen from './src/screens/MyPageScreen';
 
 // Tab Navigator 인스턴스 생성
-const Tab = createBottomTabNavigator();
+//const Tab = createBottomTabNavigator();
 
 export default function App() {
   return (
