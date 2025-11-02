@@ -23,7 +23,7 @@ export default function CouncilMyPageScreen() {
             학생 기능을 사용하시려면
           </Text>
           <Text style={[styles.messageText, styles.emphasis, { marginTop: 4 }]}>
-            설정 > 학생 화면으로 전환 을 눌러주세요
+            설정 - 학생 화면으로 전환 을 눌러주세요
           </Text>
 
           <Pressable
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
   fabColumn: {
     position: 'absolute',
     right: 24,
-    top: 510,
+    top: 500,
     alignItems: 'center',
   },
   fabButton: {

@@ -76,7 +76,7 @@ export default function HBTabBar({ state, navigation, centerRoute = 'index' }: P
   }, [navigation, activeIndex, stateRoutes]);
 
   const centerFocused = !!centerRouteObj && activeIndex === routeIndexLookup[centerRouteObj.key];
-  const centerCfg = centerRouteObj ? TAB_CONFIG[centerRouteObj.name] : undefined;
+  const centerCfg = centerRouteObj ? TAB_CONFIG[centerRouteObj.name as keyof typeof TAB_CONFIG] : undefined;
   const centerIconName: keyof typeof Ionicons.glyphMap =
     centerCfg ? (centerFocused ? centerCfg.icon.focused : centerCfg.icon.unfocused) : 'ellipse';
   const centerLabel = centerCfg?.label ?? centerRouteObj?.name ?? '';
@@ -91,7 +91,7 @@ export default function HBTabBar({ state, navigation, centerRoute = 'index' }: P
               return <View key={`${route.key}-spacer`} style={styles.centerSpacer} />;
             }
             const focused = activeIndex === routeIndexLookup[route.key];
-            const cfg = TAB_CONFIG[route.name] ?? {
+            const cfg = TAB_CONFIG[route.name as keyof typeof TAB_CONFIG] ?? {
               icon: { focused: 'ellipse', unfocused: 'ellipse-outline' },
               label: '',
             };
