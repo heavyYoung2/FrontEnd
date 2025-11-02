@@ -9,6 +9,7 @@ export const COLORS = {
 
   // Surface/Text
   bg: '#FFFFFF',
+  page: '#F5F7FA',
   surface: '#F7F8FA',
   border: '#E5E7EB',
   text: '#0F172A',

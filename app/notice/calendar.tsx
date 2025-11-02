@@ -3,7 +3,6 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,7 +22,9 @@ import { Calendar } from 'react-native-calendars';
 import { addDays, endOfMonth, format, startOfMonth } from 'date-fns';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { getAdminEvents, AdminEventInfo } from '../../src/api/adminEvents';
+import CouncilHeader from '@/components/CouncilHeader';
 
 const COLORS = {
   primary: '#2E46F0',
@@ -124,23 +125,8 @@ export default function CouncilCalendarScreen() {
   }, [events, selected]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }}>
-      {/* 최상단: 학생회 태그 + 학번 */}
-      <View style={styles.identityWrap}>
-        <View style={styles.identity}>
-          <View style={styles.badge}><Text style={styles.badgeText}>학생회</Text></View>
-          <Text style={styles.studentId}>C123456</Text>
-        </View>
-      </View>
-
-      {/* 헤더: 뒤로가기 + 중앙 타이틀 */}
-      <View style={styles.headerWrap}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={22} color={COLORS.text} />
-        </Pressable>
-        <Text style={styles.headerTitle}>달력</Text>
-        <View style={{ width: 22 }} />
-      </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }} edges={['top', 'left', 'right']}>
+      <CouncilHeader studentId="C246120" title="달력" showBack />
 
       {/* 달력 카드 */}
       <View style={styles.card}>
@@ -215,33 +201,6 @@ export default function CouncilCalendarScreen() {
 }
 
 const styles = StyleSheet.create({
-  identityWrap: {
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderColor: COLORS.border,
-  },
-  identity: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  badge: { backgroundColor: COLORS.primary, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { color: '#fff', fontSize: 12, fontFamily: 'Pretendard-SemiBold' },
-  studentId: { color: COLORS.text, fontSize: 14, fontFamily: 'Pretendard-Medium' },
-
-  headerWrap: {
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backBtn: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { color: COLORS.text, fontSize: 18, fontFamily: 'Pretendard-SemiBold', textAlign: 'center' },
-
   card: {
     marginHorizontal: 16,
     marginTop: 12,

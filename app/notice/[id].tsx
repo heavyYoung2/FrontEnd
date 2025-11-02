@@ -3,14 +3,13 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
   ActivityIndicator,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import {
@@ -18,6 +17,7 @@ import {
   AdminEventDetail,
   deleteAdminEvent,
 } from '../../src/api/adminEvents';
+import CouncilHeader from '@/components/CouncilHeader';
 
 const COLORS = {
   primary: '#2E46F0',
@@ -83,7 +83,7 @@ export default function NoticeDetail() {
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }} edges={['top', 'left', 'right']}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={COLORS.primary} />
         </View>
@@ -93,7 +93,7 @@ export default function NoticeDetail() {
 
   if (!detail) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }} edges={['top', 'left', 'right']}>
         <View style={{ padding: 20 }}>
           <Text>데이터가 없습니다.</Text>
         </View>
@@ -107,22 +107,8 @@ export default function NoticeDetail() {
       : '';
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }}>
-      {/* 상단 헤더 (학생회 태그 + 학번 + 타이틀 + 뒤로가기) */}
-      <View style={styles.headerWrap}>
-        <View style={styles.identity}>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>학생회</Text>
-          </View>
-        <Text style={styles.studentId}>C246120</Text>
-        </View>
-        <View style={styles.topRow}>
-          <Pressable onPress={() => router.back()} hitSlop={10} style={{ paddingRight: 4 }}>
-            <Ionicons name="chevron-back" size={22} color={COLORS.text} />
-          </Pressable>
-          <Text style={styles.title}>공지사항</Text>
-        </View>
-      </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }} edges={['top', 'left', 'right']}>
+      <CouncilHeader studentId="C246120" title="공지사항" showBack />
 
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         {/* 내용 카드 */}
@@ -167,19 +153,6 @@ export default function NoticeDetail() {
 }
 
 const styles = StyleSheet.create({
-  headerWrap: {
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-    paddingTop: 4,
-  },
-  identity: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
-  badge: { backgroundColor: COLORS.primary, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { color: '#fff', fontSize: 12, fontFamily: 'Pretendard-SemiBold' },
-  studentId: { color: COLORS.text, fontSize: 14, fontFamily: 'Pretendard-Medium' },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  title: { textAlign: 'center', paddingVertical: 6, color: COLORS.text, fontSize: 18, fontFamily: 'Pretendard-SemiBold' },
-
   card: {
     borderWidth: 1,
     borderColor: COLORS.border,

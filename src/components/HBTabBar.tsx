@@ -6,73 +6,113 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const COLORS = {
-  primary: '#2E46F0',
-  text: '#111827',
-  muted: '#6F7680',
-  border: '#E6E8EE',
+  primary: '#2451FF',
+  text: '#1F2329',
+  muted: '#1F2329',
+  border: '#E7EAF2',
   surface: '#FFFFFF',
+  pillBg: '#FFFFFF',
+  pillBorder: '#E2E6F2',
 };
 
-type Props = BottomTabBarProps & { centerRoute?: string };
-
-const MAP: Record<
-  string,
-  { icon: { focused: keyof typeof Ionicons.glyphMap; unfocused: keyof typeof Ionicons.glyphMap }; label: string }
-> = {
+// Single source of truth so both council/student stacks stay in sync
+const TAB_CONFIG = {
   qr:     { icon: { focused: 'qr-code',   unfocused: 'qr-code-outline' },   label: 'QR' },
   rental: { icon: { focused: 'cube',      unfocused: 'cube-outline' },      label: '물품' },
-  index:  { icon: { focused: 'calendar',  unfocused: 'calendar-outline' },  label: '달력' },  // 중앙 후보
+  index:  { icon: { focused: 'calendar',  unfocused: 'calendar-outline' },  label: '달력' }, // 중앙 후보
   locker: { icon: { focused: 'grid',      unfocused: 'grid-outline' },      label: '사물함' },
   mypage: { icon: { focused: 'person',    unfocused: 'person-outline' },    label: '마이' },
-};
+} satisfies Record<string, { icon: { focused: keyof typeof Ionicons.glyphMap; unfocused: keyof typeof Ionicons.glyphMap }; label: string }>;
+
+const TAB_ORDER = ['qr', 'rental', 'index', 'locker', 'mypage'] as const;
+
+type Props = BottomTabBarProps & { centerRoute?: (typeof TAB_ORDER)[number] };
 
 export default function HBTabBar({ state, navigation, centerRoute = 'index' }: Props) {
   const insets = useSafeAreaInsets();
   const bottomPad = Math.max(insets.bottom, 10);
+  const { routes: stateRoutes, index: activeIndex } = state;
+
+  const orderedRoutes = useMemo(() => {
+    type Route = (typeof stateRoutes)[number];
+    const routeByName = stateRoutes.reduce<Record<string, Route>>((acc, route) => {
+      acc[route.name] = route;
+      return acc;
+    }, {});
+
+    const sorted = TAB_ORDER.map(name => routeByName[name]).filter((route): route is Route => Boolean(route));
+
+    // 모든 목표 탭을 찾은 경우에만 커스텀 순서를 사용
+    if (sorted.length === TAB_ORDER.length) return sorted;
+    return stateRoutes;
+  }, [stateRoutes]);
+
+  const displayRoutes = orderedRoutes;
+
+  const routeIndexLookup = useMemo(() => {
+    return stateRoutes.reduce<Record<string, number>>((acc, route, index) => {
+      acc[route.key] = index;
+      return acc;
+    }, {});
+  }, [stateRoutes]);
 
   // 안전하게 가운데 라우트 선택 (centerRoute → 중앙 인덱스 → 첫번째)
   const { centerIndex, centerRouteObj } = useMemo(() => {
-    const byName = state.routes.findIndex(r => r.name === centerRoute);
-    if (byName >= 0) return { centerIndex: byName, centerRouteObj: state.routes[byName] };
-    const mid = Math.floor(state.routes.length / 2);
-    if (state.routes[mid]) return { centerIndex: mid, centerRouteObj: state.routes[mid] };
-    return { centerIndex: 0, centerRouteObj: state.routes[0] };
-  }, [state.routes, centerRoute]);
+    const byName = displayRoutes.findIndex(r => r.name === centerRoute);
+    if (byName >= 0) return { centerIndex: byName, centerRouteObj: displayRoutes[byName] };
+    const mid = Math.floor(displayRoutes.length / 2);
+    if (displayRoutes[mid]) return { centerIndex: mid, centerRouteObj: displayRoutes[mid] };
+    return { centerIndex: 0, centerRouteObj: displayRoutes[0] };
+  }, [displayRoutes, centerRoute]);
 
   const pressHandlers = useMemo(() => {
-    return state.routes.reduce<Record<string, () => void>>((acc, route, i) => {
+    return stateRoutes.reduce<Record<string, () => void>>((acc, route, i) => {
       acc[route.key] = () => {
         const e = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-        if (state.index !== i && !e.defaultPrevented) navigation.navigate(route.name);
+        if (activeIndex !== i && !e.defaultPrevented) navigation.navigate(route.name);
       };
       return acc;
     }, {});
-  }, [navigation, state.index, state.routes]);
+  }, [navigation, activeIndex, stateRoutes]);
+
+  const centerFocused = !!centerRouteObj && activeIndex === routeIndexLookup[centerRouteObj.key];
+  const centerCfg = centerRouteObj ? TAB_CONFIG[centerRouteObj.name] : undefined;
+  const centerIconName: keyof typeof Ionicons.glyphMap =
+    centerCfg ? (centerFocused ? centerCfg.icon.focused : centerCfg.icon.unfocused) : 'ellipse';
+  const centerLabel = centerCfg?.label ?? centerRouteObj?.name ?? '';
 
   return (
     <View pointerEvents="box-none" style={styles.root}>
       <View style={[styles.container, { paddingBottom: bottomPad }]}>
         <View style={styles.row}>
-          {state.routes.map((route, index) => {
+          {displayRoutes.map((route, index) => {
             if (index === centerIndex) {
-              // 중앙 자리 비움
+              // 중앙 버튼 자리 확보
               return <View key={`${route.key}-spacer`} style={styles.centerSpacer} />;
             }
-            const focused = state.index === index;
-            const cfg = MAP[route.name] ?? {
-              icon: { focused: 'ellipse', unfocused: 'ellipse-outline' }, // 거의 안씀(모든 탭은 MAP에 넣자)
-              label: '', // ← 폴백 라벨 비움: "(tabs)" 같은 이름 노출 방지
+            const focused = activeIndex === routeIndexLookup[route.key];
+            const cfg = TAB_CONFIG[route.name] ?? {
+              icon: { focused: 'ellipse', unfocused: 'ellipse-outline' },
+              label: '',
             };
 
+            const iconName = focused ? cfg.icon.focused : cfg.icon.unfocused;
+
             return (
-              <Pressable key={route.key} onPress={pressHandlers[route.key]} style={styles.item}>
+              <Pressable
+                key={route.key}
+                accessibilityRole="button"
+                accessibilityLabel={cfg.label || route.name}
+                onPress={pressHandlers[route.key]}
+                style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
+              >
                 <Ionicons
-                  name={(focused ? cfg.icon.focused : cfg.icon.unfocused) as any}
+                  name={iconName}
                   size={22}
-                  color={focused ? COLORS.text : COLORS.muted}
+                  color={focused ? COLORS.primary : COLORS.muted}
                 />
                 {!!cfg.label && (
-                  <Text style={[styles.label, { color: focused ? COLORS.text : COLORS.muted }]}>
+                  <Text style={[styles.label, { color: focused ? COLORS.primary : COLORS.muted }]}>
                     {cfg.label}
                   </Text>
                 )}
@@ -81,16 +121,28 @@ export default function HBTabBar({ state, navigation, centerRoute = 'index' }: P
           })}
         </View>
 
-        {/* 중앙 플로팅 버튼: 라벨 고정 '달력', 아이콘 고정 calendar */}
         {!!centerRouteObj && (
           <View pointerEvents="box-none" style={styles.centerWrap}>
             <View style={[styles.centerRing, styles.shadow]}>
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={centerLabel}
                 onPress={pressHandlers[centerRouteObj.key]}
-                style={({ pressed }) => [styles.centerBtn, { transform: [{ scale: pressed ? 0.97 : 1 }] }]}
+                style={({ pressed }) => [
+                  styles.centerBtn,
+                  {
+                    backgroundColor: centerFocused ? COLORS.primary : COLORS.pillBg,
+                    borderColor: centerFocused ? COLORS.primary : COLORS.pillBorder,
+                    borderWidth: 1,
+                    transform: [{ scale: pressed ? 0.97 : 1 }],
+                  },
+                ]}
               >
-                <Ionicons name="calendar" size={28} color="#fff" />
-                <Text style={styles.centerLabel}>달력</Text>
+                <Ionicons
+                  name={centerIconName}
+                  size={24}
+                  color={centerFocused ? '#FFFFFF' : COLORS.muted}
+                />
               </Pressable>
             </View>
           </View>
@@ -105,14 +157,20 @@ const BAR_HEIGHT = 100;
 const styles = StyleSheet.create({
   root: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 10 },
   container: {
-    marginHorizontal: 16,
+    marginHorizontal: 0,
     height: BAR_HEIGHT,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     backgroundColor: COLORS.surface,
+    borderTopWidth: 1,
+    borderColor: COLORS.border,
     overflow: 'visible',
-    paddingHorizontal: 20,
+    paddingHorizontal: 28,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: -3 },
+    elevation: 3,
   },
   row: {
     flexDirection: 'row',
@@ -122,32 +180,44 @@ const styles = StyleSheet.create({
   },
   item: {
     flex: 1,
-    minWidth: 64,
     alignItems: 'center',
     justifyContent: 'flex-end',
-    paddingBottom: 14,
+    paddingVertical: 12,
+    paddingBottom: 20,
     gap: 6,
   },
-  label: { fontSize: 12, fontFamily: 'Pretendard-Medium' },
-  centerSpacer: { flex: 1, minWidth: 58 }, // 필요시 조절
-  centerWrap: { position: 'absolute', left: 0, right: 0, top: -15, alignItems: 'center' },
+  itemPressed: { opacity: 0.65 },
+  label: { fontSize: 12, lineHeight: 16, fontFamily: 'Pretendard-Medium', letterSpacing: 0.2 },
+  centerSpacer: { width: 84 },
+  centerWrap: { position: 'absolute', left: 0, right: 0, top: -30, alignItems: 'center' },
   centerRing: {
-    width: 70, height: 50, borderRadius: 999,
+    width: 76,
+    height: 76,
+    borderRadius: 999,
     backgroundColor: COLORS.surface,
-    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.pillBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   centerBtn: {
-    width: 60, height: 60, borderRadius: 999,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center', justifyContent: 'center',
-    gap: 2,
+    width: 64,
+    height: 64,
+    borderRadius: 999,
+    borderWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#1C2A58',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
   },
-  centerLabel: { fontSize: 12, color: '#fff', fontFamily: 'Pretendard-SemiBold', lineHeight: 14 },
   shadow: {
     shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
 });

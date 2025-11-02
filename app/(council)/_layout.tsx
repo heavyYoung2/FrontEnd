@@ -13,6 +13,8 @@ export default function CouncilTabs() {
       <Tabs.Screen name="index" />   {/* 가운데 플로팅 */}
       <Tabs.Screen name="locker" />
       <Tabs.Screen name="mypage" />
+      <Tabs.Screen name="rental-overview" options={{ href: null }} />
+      <Tabs.Screen name="rental-add" options={{ href: null }} />
     </Tabs>
   );
 }

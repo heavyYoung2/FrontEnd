@@ -11,6 +11,8 @@ const COLORS = {
 };
 
 type Props = {
+  /** 헤더 맨 위 뱃지 텍스트 (예: 학생회). null이면 숨김 */
+  badgeLabel?: string | null;
   /** 학번 (예: C246120) */
   studentId: string;
   /** 헤더 제목 (예: 공지사항, 공지 작성, 달력 등) */
@@ -26,6 +28,7 @@ type Props = {
 };
 
 export default function CouncilHeader({
+  badgeLabel = '학생회',
   studentId,
   title,
   showBack = false,
@@ -39,16 +42,18 @@ export default function CouncilHeader({
     <View style={[styles.wrap, withBottomBorder && styles.border, containerStyle]}>
       {/* ① 학생회+학번 라인 (항상 최상단) */}
       <View style={styles.identity}>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>학생회</Text>
-        </View>
+        {badgeLabel ? (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{badgeLabel}</Text>
+          </View>
+        ) : null}
         <Text style={styles.studentId}>{studentId}</Text>
       </View>
 
       {/* ② 페이지 헤더 라인 (제목/뒤로가기/우측액션) */}
       {(title || showBack || right) && (
         <View style={styles.headerRow}>
-          <View style={{ width: 28 }}>
+          <View style={styles.leftSlot}>
             {showBack && (
               <Pressable hitSlop={10} onPress={() => router.back()} style={styles.backBtn}>
                 <Ionicons name="chevron-back" size={22} color={COLORS.text} />
@@ -56,7 +61,9 @@ export default function CouncilHeader({
             )}
           </View>
 
-          <Text style={styles.title}>{title ?? ''}</Text>
+          <View pointerEvents="none" style={styles.titleWrap}>
+            <Text numberOfLines={1} style={styles.title}>{title ?? ''}</Text>
+          </View>
 
           <View style={styles.right}>{right}</View>
         </View>
@@ -91,13 +98,27 @@ const styles = StyleSheet.create({
   studentId: { color: COLORS.text, fontSize: 14, fontFamily: 'Pretendard-Medium' },
 
   headerRow: {
+    position: 'relative',
     paddingHorizontal: 16,
     paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
   },
+  leftSlot: { width: 36, alignItems: 'flex-start', justifyContent: 'center' },
   backBtn: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  titleWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 56,
+  },
   title: { fontSize: 18, color: COLORS.text, fontFamily: 'Pretendard-SemiBold', textAlign: 'center' },
-  right: { minWidth: 28, alignItems: 'flex-end', justifyContent: 'center' },
+  right: {
+    marginLeft: 'auto',
+    minHeight: 28,
+    minWidth: 36,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexDirection: 'row',
+  },
 });

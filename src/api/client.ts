@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
 // 기기/에뮬레이터/시뮬레이터 구분
 const BASE_URL =
   Platform.OS === 'ios'
-    ? 'http://127.0.0.1:8080' // iOS 시뮬레이터
+    ? 'http://13.209.220.192:8080' // iOS 시뮬레이터
     : 'http://10.0.2.2:8080'; // Android 에뮬레이터
 
 export const api = axios.create({

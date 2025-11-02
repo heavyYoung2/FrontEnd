@@ -1,9 +1,10 @@
 // app/notice/edit/[id].tsx
 import React, { useEffect, useState } from 'react';
-import { Alert, Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { getAdminEventDetail, updateAdminEvent } from '../../../src/api/adminEvents';
+import CouncilHeader from '@/components/CouncilHeader';
 
 const COLORS = {
   primary: '#2E46F0', text: '#111827', muted: '#6F7680',
@@ -50,20 +51,8 @@ export default function EditEventScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }}>
-      {/* 상단 헤더 */}
-      <View style={styles.headerWrap}>
-        <View style={styles.identity}>
-          <View style={styles.badge}><Text style={styles.badgeText}>학생회</Text></View>
-          <Text style={styles.studentId}>C246120</Text>
-        </View>
-        <View style={styles.topRow}>
-          <Pressable onPress={() => router.back()} hitSlop={10} style={{ paddingRight: 4 }}>
-            <Ionicons name="chevron-back" size={22} color={COLORS.text} />
-          </Pressable>
-          <Text style={styles.title}>공지 수정</Text>
-        </View>
-      </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }} edges={['top', 'left', 'right']}>
+      <CouncilHeader studentId="C246120" title="공지 수정" showBack />
 
       <View style={styles.card}>
         <Text style={styles.label}>제목</Text>
@@ -93,14 +82,6 @@ export default function EditEventScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerWrap: { backgroundColor: COLORS.surface, paddingHorizontal: 16, paddingBottom: 10, paddingTop: 4 },
-  identity: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
-  badge: { backgroundColor: COLORS.primary, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { color: '#fff', fontSize: 12, fontFamily: 'Pretendard-SemiBold' },
-  studentId: { color: COLORS.text, fontSize: 14, fontFamily: 'Pretendard-Medium' },
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
-  title: { textAlign: 'center', paddingVertical: 6, color: COLORS.text, fontSize: 18, fontFamily: 'Pretendard-SemiBold' },
-
   card: { margin: 16, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.surface, padding: 12 },
   label: { color: COLORS.muted, fontSize: 12, marginBottom: 6 },
   input: {

@@ -6,12 +6,11 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import {
@@ -19,6 +18,7 @@ import {
   AdminEventInfo,
   toYMDfromDateTime,
 } from '../../src/api/adminEvents';
+import CouncilHeader from '@/components/CouncilHeader';
 
 const COLORS = {
   primary: '#2E46F0',
@@ -30,7 +30,6 @@ const COLORS = {
 };
 
 export default function CouncilHome() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
 
   const [list, setList] = useState<AdminEventInfo[]>([]);
@@ -98,23 +97,21 @@ export default function CouncilHome() {
   );
 
   return (
-    <SafeAreaView style={[styles.safe, { paddingTop: insets.top }]}>
-      {/* 상단 영역: 학생회 태그 + 학번 + 타이틀 + 우측 액션 */}
-      <View style={styles.headerWrap}>
-        <View style={styles.identity}>
-          <View style={styles.badge}><Text style={styles.badgeText}>학생회</Text></View>
-          <Text style={styles.studentId}>C246120</Text>
-        </View>
-        <Text style={styles.title}>공지사항</Text>
-        <View style={styles.rightLinks}>
-          <Pressable onPress={() => router.push('/notice/write')} hitSlop={10} style={styles.linkBtn}>
-            <Text style={styles.linkText}>공지 작성</Text>
-          </Pressable>
-          <Pressable onPress={() => router.push('/notice/calendar')} hitSlop={10} style={styles.linkBtn}>
-            <Text style={styles.linkText}>달력 보기</Text>
-          </Pressable>
-        </View>
-      </View>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <CouncilHeader
+        studentId="C246120"
+        title="공지사항"
+        right={(
+          <View style={styles.headerLinks}>
+            <Pressable onPress={() => router.push('/notice/write')} hitSlop={10} style={styles.linkBtn}>
+              <Text style={styles.linkText}>공지 작성</Text>
+            </Pressable>
+            <Pressable onPress={() => router.push('/notice/calendar')} hitSlop={10} style={styles.linkBtn}>
+              <Text style={styles.linkText}>달력 보기</Text>
+            </Pressable>
+          </View>
+        )}
+      />
 
       {/* 리스트 카드 */}
       <View style={styles.card}>
@@ -151,39 +148,7 @@ export default function CouncilHome() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
-
-  headerWrap: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-    paddingTop: 4,
-    backgroundColor: COLORS.surface,
-  },
-  identity: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  badge: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  badgeText: { color: '#fff', fontSize: 12, fontFamily: 'Pretendard-SemiBold' },
-  studentId: { color: COLORS.text, fontSize: 14, fontFamily: 'Pretendard-Medium' },
-
-  title: {
-    textAlign: 'center',
-    marginTop: 10,
-    marginBottom: 10,
-    color: COLORS.text,
-    fontSize: 16,
-    fontFamily: 'Pretendard-SemiBold',
-  },
-
-  rightLinks: {
-    position: 'absolute',
-    right: 16,
-    bottom: 12,
-    flexDirection: 'row',
-    gap: 16,
-  },
+  headerLinks: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   linkBtn: { paddingVertical: 4 },
   linkText: { fontSize: 12, color: '#6B7280', fontFamily: 'Pretendard-Medium' },
 

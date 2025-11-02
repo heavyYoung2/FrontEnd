@@ -1,17 +1,20 @@
 // app/notice/write.tsx
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
   Alert,
+  Modal,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { addEvent } from '../../src/api/event';
+import CouncilHeader from '@/components/CouncilHeader';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Platform } from 'react-native';
 
 const COLORS = {
   primary: '#2E46F0',
@@ -27,19 +30,55 @@ export default function NoticeWriteScreen() {
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [start, setStart] = useState<string>('');
-  const [end, setEnd] = useState<string>('');
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [activePicker, setActivePicker] = useState<'start' | 'end' | null>(null);
+  const [tempDate, setTempDate] = useState<Date>(new Date());
+
+  const openPicker = (type: 'start' | 'end') => {
+    const base =
+      type === 'start'
+        ? startDate ?? endDate ?? new Date()
+        : endDate ?? startDate ?? new Date();
+    setTempDate(base);
+    setActivePicker(type);
+  };
+
+  const handleConfirmDate = (type: 'start' | 'end' | null, nextDate: Date) => {
+    if (!type) return;
+
+    if (type === 'start') {
+      if (endDate && nextDate > endDate) {
+        Alert.alert('날짜 확인', '시작일이 종료일보다 늦을 수 없습니다.');
+        return;
+      }
+      setStartDate(nextDate);
+    } else {
+      if (startDate && nextDate < startDate) {
+        Alert.alert('날짜 확인', '종료일은 시작일 이후여야 합니다.');
+        return;
+      }
+      setEndDate(nextDate);
+    }
+
+    setActivePicker(null);
+  };
 
   const onSubmit = async () => {
     if (!title.trim()) return Alert.alert('오류', '제목을 입력하세요.');
     if (!content.trim()) return Alert.alert('오류', '내용을 입력하세요.');
 
+    if (startDate && endDate && startDate > endDate) {
+      Alert.alert('날짜 확인', '시작일은 종료일보다 빠르거나 같아야 합니다.');
+      return;
+    }
+
     try {
       const res = await addEvent({
         title: title.trim(),
         content: content.trim(),
-        eventStartDate: start || '', // yyyy-MM-dd
-        eventEndDate: end || '',
+        eventStartDate: formatDateValue(startDate),
+        eventEndDate: formatDateValue(endDate),
       });
       Alert.alert('완료', `공지 생성 성공 (id=${res.eventId})`, [
         { text: '확인', onPress: () => router.back() },
@@ -51,32 +90,8 @@ export default function NoticeWriteScreen() {
   };  
  
   return (
-    <SafeAreaView style={styles.safe}>
-      {/* (1) 아이덴티티: 학생회 + 학dla번 */}
-      <View style={styles.identityWrap}>
-        <View style={styles.identity}>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>학생회</Text>
-          </View>
-          <Text style={styles.studentId}>C246120</Text>
-        </View>
-      </View>
-
-      {/* (2) 헤더: 뒤로가기 + 중앙 타이틀 */}
-      <View style={styles.headerWrap}>
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={10}
-          style={styles.backBtn}
-        >
-          <Ionicons name="chevron-back" size={22} color={COLORS.text} />
-        </Pressable>
-
-        <Text style={styles.headerTitle}>공지 작성</Text>
-
-        {/* 균형 맞춤용 공간 */}
-        <View style={{ width: 22 }} />
-      </View>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+      <CouncilHeader studentId="C246120" title="공지 작성" showBack />
 
       {/* (3) 입력 카드 */}
       <View style={styles.card}>
@@ -97,21 +112,25 @@ export default function NoticeWriteScreen() {
           placeholder="내용을 입력하세요"
         />
 
-        <Text style={[styles.label, { marginTop: 12 }]}>시작일 (yyyy-MM-dd)</Text>
-        <TextInput
-          style={styles.input}
-          value={start}
-          onChangeText={setStart}
-          placeholder="예: 2025-07-06"
-        />
+        <Text style={[styles.label, { marginTop: 12 }]}>시작일</Text>
+        <Pressable
+          onPress={() => openPicker('start')}
+          style={({ pressed }) => [styles.dateInput, pressed && styles.dateInputPressed]}
+        >
+          <Text style={[styles.dateText, !startDate && styles.datePlaceholder]}>
+            {formatDisplayDate(startDate) ?? '날짜 선택'}
+          </Text>
+        </Pressable>
 
-        <Text style={[styles.label, { marginTop: 12 }]}>종료일 (yyyy-MM-dd)</Text>
-        <TextInput
-          style={styles.input}
-          value={end}
-          onChangeText={setEnd}
-          placeholder="예: 2025-07-07"
-        />
+        <Text style={[styles.label, { marginTop: 12 }]}>종료일</Text>
+        <Pressable
+          onPress={() => openPicker('end')}
+          style={({ pressed }) => [styles.dateInput, pressed && styles.dateInputPressed]}
+        >
+          <Text style={[styles.dateText, !endDate && styles.datePlaceholder]}>
+            {formatDisplayDate(endDate) ?? '날짜 선택'}
+          </Text>
+        </Pressable>
 
         <Pressable
           onPress={onSubmit}
@@ -123,56 +142,75 @@ export default function NoticeWriteScreen() {
           <Text style={styles.submitText}>등록하기</Text>
         </Pressable>
       </View>
+
+      <DateModal
+        visible={!!activePicker}
+        value={tempDate}
+        onChange={setTempDate}
+        onDismiss={() => setActivePicker(null)}
+        onConfirm={() => handleConfirmDate(activePicker, tempDate)}
+      />
     </SafeAreaView>
   );
 }
 
+function formatDisplayDate(date: Date | null) {
+  if (!date) return null;
+  const y = date.getFullYear();
+  const m = date.getMonth() + 1;
+  const d = date.getDate();
+  return `${y}년 ${m}월 ${d}일`;
+}
+
+function formatDateValue(date: Date | null) {
+  if (!date) return '';
+  const y = date.getFullYear();
+  const m = `${date.getMonth() + 1}`.padStart(2, '0');
+  const d = `${date.getDate()}`.padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+type DateModalProps = {
+  visible: boolean;
+  value: Date;
+  onChange: (value: Date) => void;
+  onDismiss: () => void;
+  onConfirm: () => void;
+};
+
+function DateModal({ visible, value, onChange, onDismiss, onConfirm }: DateModalProps) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalCard}>
+          <View style={styles.pickerWrap}>
+            <DateTimePicker
+              value={value}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'spinner'}
+              locale="ko"
+              onChange={(_, selected) => {
+                if (selected) onChange(selected);
+              }}
+            />
+          </View>
+          <View style={styles.modalActions}>
+            <Pressable onPress={onDismiss} style={({ pressed }) => [styles.modalBtn, pressed && styles.modalBtnPressed]}>
+              <Text style={styles.modalBtnText}>취소</Text>
+            </Pressable>
+            <Pressable onPress={onConfirm} style={({ pressed }) => [styles.modalBtn, styles.modalConfirmBtn, pressed && styles.modalBtnPressed]}>
+              <Text style={[styles.modalBtnText, { color: '#fff' }]}>확인</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
-
-  /** 아이덴티티 (맨 위) */
-  identityWrap: {
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderColor: COLORS.border,
-  },
-  identity: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  badge: {
-    backgroundColor: COLORS.primary,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  badgeText: { color: '#fff', fontSize: 12, fontFamily: 'Pretendard-SemiBold' },
-  studentId: { color: COLORS.text, fontSize: 14, fontFamily: 'Pretendard-Medium' },
-
-  /** 헤더 */
-  headerWrap: {
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backBtn: {
-    width: 22,
-    height: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    color: COLORS.text,
-    fontSize: 18,
-    fontFamily: 'Pretendard-SemiBold',
-    textAlign: 'center',
-  },
 
   /** 입력 카드 */
   card: {
@@ -193,6 +231,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     color: COLORS.text,
   },
+  dateInput: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    backgroundColor: '#fff',
+  },
+  dateInputPressed: {
+    opacity: 0.92,
+  },
+  dateText: {
+    color: COLORS.text,
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 14,
+  },
+  datePlaceholder: {
+    color: COLORS.muted,
+  },
   submitBtn: {
     marginTop: 16,
     height: 52,
@@ -205,5 +262,51 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontFamily: 'Pretendard-SemiBold',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    width: '100%',
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 16,
+  },
+  pickerWrap: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  modalActions: {
+    marginTop: 12,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  modalBtn: {
+    minWidth: 80,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: '#FFFFFF',
+  },
+  modalConfirmBtn: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  modalBtnPressed: {
+    opacity: 0.9,
+  },
+  modalBtnText: {
+    fontFamily: 'Pretendard-SemiBold',
+    color: COLORS.text,
   },
 });
