@@ -30,11 +30,17 @@ const COLORS = {
 };
 
 export default function NoticeDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, readonly, role } = useLocalSearchParams<{
+    id: string;
+    readonly?: string;
+    role?: string;
+  }>();
   const router = useRouter();
 
   const [detail, setDetail] = useState<AdminEventDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const isReadonly = readonly === '1' || readonly === 'true';
+  const badgeLabel = role === 'student' ? '학생' : '학생회';
 
   const fetchDetail = useCallback(async () => {
     try {
@@ -108,7 +114,7 @@ export default function NoticeDetail() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }} edges={['top', 'left', 'right']}>
-      <CouncilHeader studentId="C246120" title="공지사항" showBack />
+      <CouncilHeader badgeLabel={badgeLabel} studentId="C246120" title="공지사항" showBack />
 
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         {/* 내용 카드 */}
@@ -131,22 +137,23 @@ export default function NoticeDetail() {
           <Text style={styles.content}>{detail.content}</Text>
         </View>
 
-        {/* 하단 액션 버튼 */}
-        <View style={styles.actions}>
-          <Pressable
-            onPress={() => router.push(`/notice/edit/${detail.eventId}`)}
-            style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.95 }]}
-          >
-            <Text style={styles.editText}>수정하기</Text>
-          </Pressable>
+        {!isReadonly && (
+          <View style={styles.actions}>
+            <Pressable
+              onPress={() => router.push(`/notice/edit/${detail.eventId}`)}
+              style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.95 }]}
+            >
+              <Text style={styles.editText}>수정하기</Text>
+            </Pressable>
 
-          <Pressable
-            onPress={onDelete}
-            style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.95 }]}
-          >
-            <Text style={styles.deleteText}>삭제하기</Text>
-          </Pressable>
-        </View>
+            <Pressable
+              onPress={onDelete}
+              style={({ pressed }) => [styles.deleteBtn, pressed && { opacity: 0.95 }]}
+            >
+              <Text style={styles.deleteText}>삭제하기</Text>
+            </Pressable>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

@@ -20,7 +20,7 @@ type RNCalDateObject = {
 
 import { Calendar } from 'react-native-calendars';
 import { addDays, endOfMonth, format, startOfMonth } from 'date-fns';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getAdminEvents, AdminEventInfo } from '../../src/api/adminEvents';
@@ -57,6 +57,9 @@ function eachDay(startYmd: string, endYmd: string): string[] {
 
 export default function CouncilCalendarScreen() {
   const router = useRouter();
+  const { role } = useLocalSearchParams<{ role?: string }>();
+  const badgeLabel = role === 'student' ? '학생' : '학생회';
+  const isReadonly = role === 'student';
 
   const [month, setMonth] = useState<Date>(new Date());
   const [selected, setSelected] = useState<string>(ymd(new Date()));
@@ -126,7 +129,7 @@ export default function CouncilCalendarScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.bg }} edges={['top', 'left', 'right']}>
-      <CouncilHeader studentId="C246120" title="달력" showBack />
+      <CouncilHeader badgeLabel={badgeLabel} studentId="C246120" title="달력" showBack />
 
       {/* 달력 카드 */}
       <View style={styles.card}>
@@ -180,7 +183,15 @@ export default function CouncilCalendarScreen() {
             filtered.map((ev) => (
               <Pressable
                 key={ev.eventId}
-                onPress={() => router.push(`/notice/${ev.eventId}`)}
+                onPress={() =>
+                  router.push({
+                    pathname: '/notice/[id]',
+                    params: {
+                      id: String(ev.eventId),
+                      ...(isReadonly ? { readonly: '1', role: 'student' } : {}),
+                    },
+                  })
+                }
                 style={({ pressed }) => [styles.itemRow, pressed && { opacity: 0.95 }]}
               >
                 <View style={styles.dot} />

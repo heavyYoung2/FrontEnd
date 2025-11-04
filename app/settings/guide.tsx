@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '../../src/design/colors';
 import { TYPO } from '../../src/design/typography';
@@ -49,7 +50,7 @@ const TECH_STACK = [
 ];
 
 const DEPLOYMENT = [
-  'CI/CD: GitHub Actions → Docker Hub → AWS EC2 (예정)',
+  'CI/CD: GitHub Actions - Docker Hub - AWS EC2 (예정)',
   '운영 환경: Ubuntu 22.04, Nginx Reverse Proxy, HTTPS (예정)',
   '모니터링: CloudWatch, Prometheus, Grafana (예정)',
 ];
@@ -59,10 +60,10 @@ const TESTING = [
   'Jacoco 리포트 제공 (코드 커버리지) (예정)',
 ];
 
-export default function GuideScreen() {
+export function GuideScreenTemplate({ badgeLabel }: { badgeLabel: string }) {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <CouncilHeader studentId="C246120" title="회비영 안내" showBack />
+      <CouncilHeader badgeLabel={badgeLabel} studentId="C246120" title="회비영 안내" showBack />
 
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.heading1}># 회비영</Text>
@@ -115,12 +116,9 @@ export default function GuideScreen() {
 
         <Section title="🏗️ 아키텍처">
           <View style={styles.codeBlock}>
-            <Text style={styles.codeText}>
-              flowchart LR{'\n'}
-              {'  '}Client --> BFF --> Backend[(Spring Boot)]{'\n'}
-              {'  '}Backend --> DB[(MySQL)]{'\n'}
-              {'  '}Backend --> S3[(AWS S3)]
-            </Text>
+            <Text style={styles.codeText}>Client - BFF - Backend (Spring Boot)</Text>
+            <Text style={styles.codeText}>Backend - DB (MySQL)</Text>
+            <Text style={styles.codeText}>Backend - S3 (AWS S3)</Text>
           </View>
         </Section>
 
@@ -147,6 +145,12 @@ export default function GuideScreen() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+export default function GuideScreen() {
+  const { role } = useLocalSearchParams<{ role?: string }>();
+  const badgeLabel = role === 'student' ? '학생' : '학생회';
+  return <GuideScreenTemplate badgeLabel={badgeLabel} />;
 }
 
 function Section({
@@ -191,8 +195,7 @@ const styles = StyleSheet.create({
     gap: 24,
   },
   heading1: {
-    ...TYPO.title,
-    fontFamily: 'Pretendard-Bold',
+    ...TYPO.h1,
     color: COLORS.text,
   },
   heading2: {
@@ -261,6 +264,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1118270D',
     borderRadius: 12,
     padding: 16,
+    gap: 4,
   },
   codeText: {
     fontFamily: 'Courier',

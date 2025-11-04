@@ -27,7 +27,7 @@ export default function CouncilMyPageScreen() {
           </Text>
 
           <Pressable
-            onPress={() => router.push('/settings/switch-role')}
+            onPress={() => router.replace('/(student)/(tabs)/mypage')}
             style={({ pressed }) => [styles.actionButton, pressed && { opacity: 0.95 }]}
             hitSlop={10}
           >
