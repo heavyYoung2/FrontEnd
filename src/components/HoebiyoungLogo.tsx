@@ -6,8 +6,8 @@ type HoebiyoungLogoProps = {
   align?: 'center' | 'left';
 };
 
-const LOGO_WITH_TAGLINE = require('@/assets/images/splash-icon-hoebiyoung.png') as ImageSourcePropType;
-const LOGO_ICON = require('@/assets/images/icon-hoebiyoung.png') as ImageSourcePropType;
+const LOGO_WITH_TAGLINE = require('@/assets/images/heavy-young-logo.png') as ImageSourcePropType;
+const LOGO_ICON = require('@/assets/images/heavy-young-app.png') as ImageSourcePropType;
 
 export default function HoebiyoungLogo({ taglineVisible = true, align = 'center' }: HoebiyoungLogoProps) {
   const { source, width } = useMemo(() => {
