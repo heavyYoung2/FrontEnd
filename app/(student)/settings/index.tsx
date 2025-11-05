@@ -30,7 +30,14 @@ export default function StudentSettingsHome() {
       case 'logout':
         Alert.alert('로그아웃', '정말 로그아웃 하시겠어요?', [
           { text: '취소', style: 'cancel' },
-          { text: '로그아웃', style: 'destructive', onPress: () => {/* TODO: signOut */} },
+          {
+            text: '로그아웃',
+            style: 'destructive',
+            onPress: () => {
+              // TODO: signOut
+              router.replace('/auth');
+            },
+          },
         ]);
         break;
       case 'withdraw':

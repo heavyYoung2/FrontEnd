@@ -156,6 +156,7 @@ export default function RentalOverviewScreen() {
         studentId="C246120"
         title="대여 현황 및 관리"
         showBack
+        backFallbackHref="/(council)/rental"
         right={(
           <Pressable onPress={isDatePickerOpen ? undefined : openDatePicker} hitSlop={10} style={styles.dateIconBtn}>
             <Ionicons name="calendar-outline" size={20} color={COLORS.text} />

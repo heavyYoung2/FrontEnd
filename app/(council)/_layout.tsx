@@ -15,6 +15,8 @@ export default function CouncilTabs() {
       <Tabs.Screen name="mypage" />
       <Tabs.Screen name="rental-overview" options={{ href: null }} />
       <Tabs.Screen name="rental-add" options={{ href: null }} />
+      <Tabs.Screen name="locker-applications" options={{ href: null }} />
+      <Tabs.Screen name="locker-history" options={{ href: null }} />
     </Tabs>
   );
 }

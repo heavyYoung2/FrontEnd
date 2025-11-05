@@ -19,6 +19,10 @@ type Props = {
   title?: string;
   /** 뒤로가기 버튼 표시 여부 */
   showBack?: boolean;
+  /** back 버튼 클릭 시 실행할 커스텀 핸들러 */
+  onBackPress?: () => void;
+  /** back 스택이 없을 때 이동할 fallback 경로 */
+  backFallbackHref?: string;
   /** 오른쪽에 들어갈 액션(텍스트/버튼 등) */
   right?: React.ReactNode;
   /** 바닥 테두리 표시 여부 (기본 true) */
@@ -32,11 +36,28 @@ export default function CouncilHeader({
   studentId,
   title,
   showBack = false,
+  onBackPress,
+  backFallbackHref,
   right,
   withBottomBorder = true,
   containerStyle,
 }: Props) {
   const router = useRouter();
+
+  const handleBack = () => {
+    if (onBackPress) {
+      onBackPress();
+      return;
+    }
+    const canGoBack = typeof router.canGoBack === 'function' ? router.canGoBack() : false;
+    if (canGoBack) {
+      router.back();
+    } else if (backFallbackHref) {
+      router.replace(backFallbackHref);
+    } else {
+      router.replace('/(council)/index');
+    }
+  };
 
   return (
     <View style={[styles.wrap, withBottomBorder && styles.border, containerStyle]}>
@@ -55,7 +76,7 @@ export default function CouncilHeader({
         <View style={styles.headerRow}>
           <View style={styles.leftSlot}>
             {showBack && (
-              <Pressable hitSlop={10} onPress={() => router.back()} style={styles.backBtn}>
+              <Pressable hitSlop={10} onPress={handleBack} style={styles.backBtn}>
                 <Ionicons name="chevron-back" size={22} color={COLORS.text} />
               </Pressable>
             )}

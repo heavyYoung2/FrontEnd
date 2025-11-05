@@ -69,6 +69,7 @@ export default function RentalAddScreen() {
         studentId="C246120"
         title="대여 물품 종류 추가하기"
         showBack
+        backFallbackHref="/(council)/rental"
         withBottomBorder={false}
       />
 
