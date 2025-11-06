@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Alert,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,10 +12,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import CouncilHeader from '@/components/CouncilHeader';
-import { COLORS } from '../../src/design/colors';
-import { TYPO } from '../../src/design/typography';
+import { COLORS } from '@/src/design/colors';
+import { TYPO } from '@/src/design/typography';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Platform } from 'react-native';
 
 type RentalStatus = 'rented' | 'returned';
 

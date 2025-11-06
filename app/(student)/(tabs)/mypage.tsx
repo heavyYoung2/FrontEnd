@@ -1,27 +1,25 @@
 import React from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ScrollView, StyleSheet, Text, View, Pressable } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import CouncilHeader from '@/components/CouncilHeader';
-import { COLORS } from '../../../src/design/colors';
-import { TYPO } from '../../../src/design/typography';
+import { COLORS } from '@/src/design/colors';
+import { TYPO } from '@/src/design/typography';
+import { ActiveRental, useMyActiveRentals } from './rental/hooks';
 
 const lockerInfo = {
   number: 'A12번',
   statusLabel: '대여중',
   assignedAt: '2025-07-01',
 };
-
-const activeRentals = [
-  {
-    id: 'battery-01',
-    name: '보조배터리',
-    status: '대여중',
-    rentalDate: '2025-07-12',
-    dueDate: '2025-07-12',
-  },
-];
 
 const membershipStatus = {
   paid: true,
@@ -33,8 +31,19 @@ const warningSummary: { type: 'none' } | { type: 'blacklist'; until: string } = 
   type: 'none',
 };
 
+const RENTAL_STATUS_BADGE: Record<
+  ActiveRental['status'],
+  { label: string; background: string; color: string }
+> = {
+  IN_PROGRESS: { label: '대여중', background: '#EEF2FF', color: COLORS.primary },
+  OVERDUE: { label: '연체', background: 'rgba(239, 68, 68, 0.12)', color: COLORS.danger },
+};
+
 export default function StudentMyPageScreen() {
   const router = useRouter();
+  const { rentals, isLoading: rentalsLoading, error: rentalsError, refetch } = useMyActiveRentals();
+
+  const hasRentals = rentals.length > 0;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -71,40 +80,75 @@ export default function StudentMyPageScreen() {
           </View>
 
           <View style={styles.card}>
-            {activeRentals.length === 0 ? (
-              <Text style={styles.emptyText}>현재 대여중인 물품이 없어요.</Text>
-            ) : (
-              activeRentals.map((item, index) => (
-                <View key={item.id} style={index > 0 ? styles.rentalBlockSpacing : undefined}>
-                  <View style={styles.cardRow}>
-                    <Text style={styles.rentalName}>{item.name}</Text>
-                    <View style={[styles.statusPill, styles.statusActive]}>
-                      <Text style={styles.statusPillText}>{item.status}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.metaRow}>
-                    <Text style={styles.metaLabel}>대여 날짜</Text>
-                    <Text style={styles.metaValue}>{item.rentalDate}</Text>
-                  </View>
-                  <View style={[styles.metaRow, { marginTop: 4 }]}>
-                    <Text style={styles.metaLabel}>반납 예정일</Text>
-                    <Text style={styles.metaValue}>{item.dueDate}</Text>
-                  </View>
-
-                  <Pressable
-                    hitSlop={10}
-                    onPress={() => router.push('/(student)/return-item')}
-                    style={({ pressed }) => [
-                      styles.secondaryButton,
-                      pressed && styles.pressedSecondary,
-                    ]}
-                  >
-                    <Text style={styles.secondaryButtonText}>반납하기</Text>
-                  </Pressable>
+            {rentalsError ? (
+              <Pressable style={styles.errorBanner} onPress={refetch} hitSlop={6}>
+                <Ionicons name="alert-circle" size={16} color={COLORS.danger} style={{ marginRight: 8 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.errorTitle}>대여 정보를 불러오지 못했어요</Text>
+                  <Text style={styles.errorMessage}>{rentalsError.message}</Text>
                 </View>
-              ))
-            )}
+                <Ionicons name="refresh" size={18} color={COLORS.danger} />
+              </Pressable>
+            ) : null}
+
+            {rentalsLoading && !hasRentals ? (
+              <View style={styles.loadingWrap}>
+                <ActivityIndicator color={COLORS.primary} />
+              </View>
+            ) : null}
+
+            {hasRentals ? (
+              <>
+                {rentalsLoading ? (
+                  <View style={styles.inlineLoader}>
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                  </View>
+                ) : null}
+                {rentals.map((item, index) => {
+                  const badge = RENTAL_STATUS_BADGE[item.status];
+                  return (
+                    <View key={item.id} style={index > 0 ? styles.rentalBlockSpacing : undefined}>
+                      <View style={styles.cardRow}>
+                        <Text style={styles.rentalName}>{item.itemName}</Text>
+                        <View style={[styles.statusPill, { backgroundColor: badge.background }]}>
+                          <Text style={[styles.statusPillText, { color: badge.color }]}>{badge.label}</Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.metaRow}>
+                        <Text style={styles.metaLabel}>대여 날짜</Text>
+                        <Text style={styles.metaValue}>{item.rentedAt}</Text>
+                      </View>
+                      <View style={[styles.metaRow, { marginTop: 4 }]}>
+                        <Text style={styles.metaLabel}>반납 예정일</Text>
+                        <Text style={styles.metaValue}>{item.expectedReturnAt}</Text>
+                      </View>
+
+                      <Pressable
+                        hitSlop={10}
+                        onPress={() => {
+                          if (item.rentalHistoryId == null) return;
+                          router.push({
+                            pathname: '/(student)/return-item',
+                            params: { rentalHistoryId: String(item.rentalHistoryId) },
+                          });
+                        }}
+                        style={({ pressed }) => [
+                          styles.secondaryButton,
+                          pressed && styles.pressedSecondary,
+                          item.rentalHistoryId == null && styles.secondaryButtonDisabled,
+                        ]}
+                        disabled={item.rentalHistoryId == null}
+                      >
+                        <Text style={styles.secondaryButtonText}>반납하기</Text>
+                      </Pressable>
+                    </View>
+                  );
+                })}
+              </>
+            ) : !rentalsLoading && !rentalsError ? (
+              <Text style={styles.emptyText}>현재 대여중인 물품이 없어요.</Text>
+            ) : null}
           </View>
         </View>
 
@@ -203,118 +247,52 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   sectionTitle: {
-    ...TYPO.subtitle,
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 18,
     color: COLORS.text,
   },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: COLORS.border,
-    shadowColor: '#000000',
-    shadowOpacity: 0.04,
+    backgroundColor: COLORS.bg,
+    padding: 18,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
-    elevation: 1,
-    gap: 12,
   },
   cardRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   lockerId: {
     fontFamily: 'Pretendard-SemiBold',
     fontSize: 20,
-    color: COLORS.primary,
+    color: COLORS.text,
   },
   statusPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
     borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statusActive: {
+    backgroundColor: '#EEF2FF',
+  },
+  statusSuccess: {
+    backgroundColor: 'rgba(34, 197, 94, 0.12)',
   },
   statusPillText: {
     fontFamily: 'Pretendard-SemiBold',
     fontSize: 12,
-    color: '#FFFFFF',
-  },
-  statusActive: {
-    backgroundColor: COLORS.primary,
-  },
-  statusSuccess: {
-    backgroundColor: COLORS.success,
-  },
-  meta: {
-    ...TYPO.bodySm,
-    color: COLORS.textMuted,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  metaLabel: {
-    fontFamily: 'Pretendard-Medium',
-    fontSize: 14,
-    color: COLORS.text,
-  },
-  metaValue: {
-    fontFamily: 'Pretendard-Regular',
-    fontSize: 14,
-    color: COLORS.text,
-  },
-  rentalBlockSpacing: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-  },
-  rentalName: {
-    fontFamily: 'Pretendard-SemiBold',
-    fontSize: 16,
-    color: COLORS.text,
-  },
-  emptyText: {
-    ...TYPO.bodySm,
-    textAlign: 'center',
-    paddingVertical: 16,
-    color: COLORS.textMuted,
-  },
-  secondaryButton: {
-    marginTop: 12,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-  },
-  secondaryButtonText: {
-    fontFamily: 'Pretendard-SemiBold',
-    fontSize: 14,
     color: COLORS.primary,
   },
-  primaryButton: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: COLORS.primary,
-  },
-  primaryButtonText: {
-    fontFamily: 'Pretendard-SemiBold',
-    fontSize: 14,
-    color: '#FFFFFF',
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  pressedPrimary: {
-    opacity: 0.85,
-  },
-  pressedSecondary: {
-    backgroundColor: COLORS.blue100,
+  meta: {
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 12,
+    color: COLORS.textMuted,
   },
   linkButton: {
     flexDirection: 'row',
@@ -322,45 +300,111 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   linkText: {
-    fontFamily: 'Pretendard-SemiBold',
-    fontSize: 14,
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 13,
     color: COLORS.primary,
   },
+  pressed: {
+    opacity: 0.8,
+  },
+  rentalName: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 16,
+    color: COLORS.text,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  metaLabel: {
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 12,
+    color: COLORS.textMuted,
+  },
+  metaValue: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 13,
+    color: COLORS.text,
+  },
+  rentalBlockSpacing: {
+    marginTop: 18,
+    paddingTop: 18,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  secondaryButton: {
+    marginTop: 14,
+    alignSelf: 'flex-start',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  secondaryButtonDisabled: {
+    borderColor: COLORS.border,
+    backgroundColor: '#F3F4F6',
+  },
+  secondaryButtonText: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 13,
+    color: COLORS.primary,
+  },
+  pressedSecondary: {
+    opacity: 0.9,
+  },
+  primaryButton: {
+    marginTop: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+  },
+  primaryButtonText: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 15,
+    color: '#FFFFFF',
+  },
+  pressedPrimary: {
+    opacity: 0.92,
+  },
+  emptyText: {
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 13,
+    color: COLORS.textMuted,
+  },
   chatButton: {
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderRadius: 16,
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    backgroundColor: COLORS.primary,
   },
   chatButtonPressed: {
-    opacity: 0.9,
+    opacity: 0.92,
   },
   chatButtonText: {
     fontFamily: 'Pretendard-SemiBold',
-    fontSize: 16,
+    fontSize: 15,
     color: '#FFFFFF',
   },
   warningCard: {
-    borderRadius: 16,
-    paddingVertical: 24,
-    paddingHorizontal: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
   },
   warningSafe: {
-    backgroundColor: COLORS.blue100,
+    backgroundColor: '#EEF2FF',
   },
   warningActive: {
-    backgroundColor: '#FFE5E7',
-    borderWidth: 1,
-    borderColor: COLORS.danger,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
   },
   warningText: {
     fontFamily: 'Pretendard-SemiBold',
-    fontSize: 16,
+    fontSize: 14,
   },
   warningTextSafe: {
     color: COLORS.primary,
@@ -370,15 +414,14 @@ const styles = StyleSheet.create({
   },
   fabColumn: {
     position: 'absolute',
-    right: 24,
-    bottom: 120,
-    alignItems: 'center',
+    right: 20,
+    bottom: 32,
     gap: 12,
   },
   fabButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -386,8 +429,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOpacity: 0.08,
-    shadowRadius: 8,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+  },
+  errorTitle: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 13,
+    color: COLORS.danger,
+  },
+  errorMessage: {
+    ...TYPO.bodySm,
+    color: COLORS.danger,
+  },
+  loadingWrap: {
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  inlineLoader: {
+    alignSelf: 'flex-end',
   },
 });

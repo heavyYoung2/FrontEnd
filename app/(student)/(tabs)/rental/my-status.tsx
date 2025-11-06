@@ -1,5 +1,13 @@
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,14 +26,29 @@ const STATUS_META: Record<
 
 export default function StudentRentalStatusScreen() {
   const router = useRouter();
-  const rentals = useMyActiveRentals();
+  const { rentals, isLoading, error, refetch } = useMyActiveRentals();
+
+  const showEmpty = !isLoading && !error && rentals.length === 0;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <CouncilHeader badgeLabel="학생" studentId="C246120" title="내 대여 현황 조회하기" showBack />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {rentals.length === 0 ? (
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={COLORS.primary} />}
+      >
+        {error ? (
+          <Pressable style={styles.errorCard} onPress={refetch} hitSlop={6}>
+            <Ionicons name="warning-outline" size={20} color={COLORS.danger} style={{ marginRight: 10 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.errorTitle}>대여 현황을 불러오지 못했어요</Text>
+              <Text style={styles.errorMessage}>{error.message}</Text>
+            </View>
+            <Ionicons name="refresh" size={18} color={COLORS.danger} />
+          </Pressable>
+        ) : showEmpty ? (
           <View style={styles.emptyCard}>
             <Ionicons name="cloud-outline" size={24} color={COLORS.textMuted} style={{ marginBottom: 10 }} />
             <Text style={styles.emptyText}>현재 대여중인 물품이 없어요</Text>
@@ -33,6 +56,12 @@ export default function StudentRentalStatusScreen() {
           </View>
         ) : (
           <View style={styles.cardList}>
+            {isLoading ? (
+              <View style={styles.loadingCard}>
+                <ActivityIndicator color={COLORS.primary} />
+              </View>
+            ) : null}
+
             {rentals.map((rental) => {
               const meta = STATUS_META[rental.status];
               return (
@@ -66,9 +95,20 @@ export default function StudentRentalStatusScreen() {
                   </View>
 
                   <Pressable
-                    style={({ pressed }) => [styles.returnBtn, pressed && styles.returnBtnPressed]}
-                    onPress={() => router.push('/(student)/return-item')}
+                    style={({ pressed }) => [
+                      styles.returnBtn,
+                      pressed && styles.returnBtnPressed,
+                      rental.rentalHistoryId == null && styles.returnBtnDisabled,
+                    ]}
+                    onPress={() =>
+                      rental.rentalHistoryId != null &&
+                      router.push({
+                        pathname: '/(student)/return-item',
+                        params: { rentalHistoryId: String(rental.rentalHistoryId) },
+                      })
+                    }
                     hitSlop={6}
+                    disabled={rental.rentalHistoryId == null}
                   >
                     <Ionicons name="arrow-undo" size={16} color="#fff" style={{ marginRight: 6 }} />
                     <Text style={styles.returnBtnText}>반납하기</Text>
@@ -137,6 +177,15 @@ const styles = StyleSheet.create({
   },
   cardList: {
     gap: 16,
+  },
+  loadingCard: {
+    paddingVertical: 32,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   card: {
     padding: 22,
@@ -210,6 +259,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: COLORS.primary,
   },
+  returnBtnDisabled: {
+    backgroundColor: COLORS.border,
+  },
   returnBtnPressed: {
     opacity: 0.92,
   },
@@ -261,5 +313,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.text,
   },
+  errorCard: {
+    padding: 18,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  errorTitle: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 14,
+    color: COLORS.danger,
+  },
+  errorMessage: {
+    ...TYPO.bodySm,
+    color: COLORS.danger,
+    marginTop: 2,
+  },
 });
-

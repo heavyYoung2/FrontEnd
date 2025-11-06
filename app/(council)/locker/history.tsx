@@ -11,7 +11,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '@/src/design/colors';
-import { TYPO } from '@/src/design/typography';
 import {
   fetchLockersBySection,
   fetchLockerSemesters,
@@ -200,34 +199,37 @@ export default function LockerHistoryScreen() {
             const lockers = lockersBySection[section];
             return (
               <View key={section} style={styles.sectionCard}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>{section} 구역</Text>
-                  <Text style={styles.sectionMeta}>{lockers.length}칸</Text>
-                </View>
-
-                <View style={styles.tableHeader}>
-                  <Text style={[styles.tableHeaderCell, { flex: 0.9 }]}>사물함</Text>
-                  <Text style={[styles.tableHeaderCell, { flex: 1.1 }]}>학번</Text>
-                  <Text style={[styles.tableHeaderCell, { flex: 1.2 }]}>이름</Text>
-                </View>
-
-                <View style={styles.tableBody}>
-                  {lockers.map((locker, index) => {
-                    const theme = STATUS_THEME[locker.status.toUpperCase()] ?? STATUS_THEME.IN_USE;
+                <Text style={styles.sectionTitle}>{section} 구역</Text>
+                <View style={styles.sectionLockers}>
+                  {lockers.map((locker) => {
+                    const theme = STATUS_THEME[locker.status.toUpperCase()] ?? STATUS_THEME.AVAILABLE;
                     return (
                       <View
                         key={locker.id}
                         style={[
-                          styles.tableRow,
-                          index === lockers.length - 1 && styles.tableRowLast,
+                          styles.lockerTile,
+                          {
+                            backgroundColor: theme.bg,
+                            borderColor: theme.border,
+                          },
                         ]}
                       >
-                        <Text style={[styles.tableCell, { flex: 0.9, color: theme.text }]}>{locker.label}</Text>
-                        <Text style={[styles.tableCell, { flex: 1.1 }]}>{locker.studentId ?? '-'}</Text>
-                        <Text style={[styles.tableCell, { flex: 1.2 }]}>{locker.studentName ?? '-'}</Text>
+                        <Text style={[styles.lockerLabel, { color: theme.text }]}>{locker.label}</Text>
+                        <Text style={[styles.lockerStatus, { color: theme.text }]}>{theme.label}</Text>
+                        {locker.studentName ? (
+                          <View style={{ gap: 2 }}>
+                            <Text style={styles.lockerMeta}>{locker.studentName}</Text>
+                            {locker.studentId ? <Text style={styles.lockerMetaSecondary}>{locker.studentId}</Text> : null}
+                          </View>
+                        ) : (
+                          <Text style={styles.lockerMetaSecondary}>배정자 없음</Text>
+                        )}
                       </View>
                     );
                   })}
+                  {!lockers.length && (
+                    <Text style={styles.emptyState}>사물함 내역이 없습니다.</Text>
+                  )}
                 </View>
               </View>
             );
@@ -237,32 +239,60 @@ export default function LockerHistoryScreen() {
   );
 }
 
+function normalizeLockers(raw: LockerInfoApi[], section: SectionId): LockerItem[] {
+  return raw
+    .map((locker) => {
+      const sectionId = locker.location?.charAt(0);
+      if (!sectionId || !isSectionId(sectionId)) return null;
+      const number = parseInt(locker.location.slice(1), 10);
+      if (Number.isNaN(number)) return null;
+      const statusUpper = locker.status?.toUpperCase() ?? 'AVAILABLE';
+
+      const base: LockerItem = {
+        id: locker.id,
+        label: `${sectionId}-${number}`,
+        section: sectionId,
+        number,
+        status: (statusUpper as LockerStatusApi) ?? 'AVAILABLE',
+      };
+
+      if (locker.owner) {
+        base.studentId = locker.owner.studentId;
+        base.studentName = locker.owner.name;
+      }
+
+      if (statusUpper === 'BROKEN') {
+        base.status = 'BROKEN';
+      } else if (statusUpper === 'IN_USE') {
+        base.status = 'IN_USE';
+      } else if (statusUpper === 'MY') {
+        base.status = 'MY';
+      } else {
+        base.status = 'AVAILABLE';
+      }
+
+      return base;
+    })
+    .filter((locker): locker is LockerItem => locker !== null)
+    .sort((a, b) => a.number - b.number);
+}
+
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: COLORS.page,
+    backgroundColor: '#F8FAFF',
   },
   scroll: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-    paddingTop: 18,
+    padding: 20,
+    paddingBottom: 120,
     gap: 20,
   },
-  spacer: {
-    height: 4,
-  },
   semesterRow: {
-    gap: 10,
-    backgroundColor: COLORS.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 16,
-    alignItems: 'flex-start',
+    gap: 12,
   },
   semesterLabel: {
     fontFamily: 'Pretendard-SemiBold',
-    fontSize: 15,
+    fontSize: 14,
     color: COLORS.text,
   },
   semesterChips: {
@@ -271,20 +301,20 @@ const styles = StyleSheet.create({
   },
   semesterChip: {
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
   },
   semesterChipActive: {
     borderColor: COLORS.primary,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#E0EBFF',
   },
   semesterChipText: {
     fontFamily: 'Pretendard-Medium',
     fontSize: 13,
-    color: COLORS.text,
+    color: '#4B5563',
   },
   semesterChipTextActive: {
     color: COLORS.primary,
@@ -292,143 +322,70 @@ const styles = StyleSheet.create({
   semesterEmpty: {
     fontFamily: 'Pretendard-Medium',
     fontSize: 13,
-    color: '#6B7280',
-    paddingVertical: 8,
+    color: '#9CA3AF',
   },
-  sectionCard: {
-    borderRadius: 18,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 18,
-    gap: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  sectionTitle: {
-    ...TYPO.subtitle,
-    color: COLORS.text,
-  },
-  sectionMeta: {
-    fontFamily: 'Pretendard-Medium',
-    color: '#6B7280',
+  spacer: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
   },
   loadingBlock: {
-    borderRadius: 18,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingVertical: 32,
-    paddingHorizontal: 16,
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 12,
+    paddingVertical: 40,
   },
   loadingText: {
     fontFamily: 'Pretendard-Medium',
     fontSize: 14,
     color: COLORS.text,
   },
-  tableHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginTop: 4,
-  },
-  tableHeaderCell: {
-    fontFamily: 'Pretendard-SemiBold',
-    fontSize: 12,
-    color: '#4B5563',
-  },
-  tableBody: {
-    marginTop: 8,
+  sectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    borderRadius: 12,
-    overflow: 'hidden',
+    padding: 18,
+    gap: 14,
   },
-  tableRow: {
+  sectionTitle: {
+    fontFamily: 'Pretendard-Bold',
+    fontSize: 18,
+    color: COLORS.text,
+  },
+  sectionLockers: {
     flexDirection: 'row',
-    paddingHorizontal: 14,
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  lockerTile: {
+    width: '48%',
+    borderRadius: 14,
+    borderWidth: 1,
     paddingVertical: 12,
-    gap: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E5E7EB',
+    paddingHorizontal: 10,
+    gap: 6,
   },
-  tableRowLast: {
-    borderBottomWidth: 0,
+  lockerLabel: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 15,
   },
-  tableCell: {
+  lockerStatus: {
     fontFamily: 'Pretendard-Medium',
     fontSize: 13,
-    color: '#1F2937',
   },
-  tableRowDivider: {
-    height: 1,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 12,
+  lockerMeta: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 12,
+    color: '#475569',
+  },
+  lockerMetaSecondary: {
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  emptyState: {
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 13,
+    color: '#9CA3AF',
   },
 });
-
-function normalizeLockers(raw: LockerInfoApi[], fallbackSection: SectionId): LockerItem[] {
-  return raw.map((item, index) => {
-    const parsedFromName = Number(String(item.lockerName ?? '').replace(/\D/g, ''));
-    const normalizedFromName = Number.isFinite(parsedFromName) && parsedFromName > 0 ? parsedFromName : undefined;
-    const lockerNumber =
-      item.lockerNumber ??
-      item.lockerNum ??
-      item.lockerNo ??
-      item.lockerId ??
-      normalizedFromName ??
-      index + 1;
-
-    const rawSection = (
-      item.lockerSection ??
-      item.section ??
-      item.sectionName ??
-      fallbackSection
-    )
-      .toString()
-      .toUpperCase();
-
-    const normalizedSectionChar = rawSection.charAt(0);
-    const normalizedSection = isSectionId(rawSection)
-      ? rawSection
-      : isSectionId(normalizedSectionChar)
-        ? (normalizedSectionChar as SectionId)
-        : fallbackSection;
-
-    const displayLabel = `${normalizedSection}${lockerNumber}`;
-
-    const status = (item.lockerStatus ?? 'IN_USE').toString().toUpperCase();
-
-    const studentId =
-      item.studentId ??
-      item.studentNumber ??
-      item.memberNumber ??
-      item.memberId ??
-      undefined;
-
-    const studentName = item.studentName ?? item.memberName ?? item.name ?? undefined;
-
-    return {
-      id: `${rawSection || normalizedSection}-${lockerNumber}`,
-      label: displayLabel,
-      section: normalizedSection,
-      number: lockerNumber,
-      status,
-      studentId,
-      studentName,
-    };
-  });
-}

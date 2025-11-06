@@ -60,7 +60,12 @@ export default function StudentRentalDashboardScreen() {
                     {item.description ? <Text style={styles.itemDesc}>{item.description}</Text> : null}
                   </View>
                   <Pressable
-                    onPress={() => router.push({ pathname: '/(student)/rent-item', params: { itemId: item.id } })}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/(student)/rent-item',
+                        params: { itemId: String(item.categoryId) },
+                      })
+                    }
                     hitSlop={8}
                     style={({ pressed }) => [styles.chipButton, pressed && styles.chipButtonPressed]}
                   >
@@ -304,4 +309,3 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
 });
-

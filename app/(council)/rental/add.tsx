@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import CouncilHeader from '@/components/CouncilHeader';
-import { COLORS } from '../../src/design/colors';
+import { COLORS } from '@/src/design/colors';
 
 export default function RentalAddScreen() {
   const router = useRouter();

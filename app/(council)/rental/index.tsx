@@ -11,8 +11,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import CouncilHeader from '@/components/CouncilHeader';
-import { COLORS } from '../../src/design/colors';
-import { TYPO } from '../../src/design/typography';
+import { COLORS } from '@/src/design/colors';
+import { TYPO } from '@/src/design/typography';
 import { useRouter } from 'expo-router';
 
 type AssetStatus = 'available' | 'rented';
@@ -134,7 +134,7 @@ export default function RentalTab() {
         studentId="C246120"
         title="대여 물품"
         right={(
-          <Pressable onPress={() => router.push('/rental-overview')} hitSlop={10} style={styles.iconBtn}>
+          <Pressable onPress={() => router.push('/(council)/rental/overview')} hitSlop={10} style={styles.iconBtn}>
             <Ionicons name="list" size={20} color={COLORS.text} />
           </Pressable>
         )}
@@ -174,7 +174,7 @@ export default function RentalTab() {
 
         <View style={styles.actionPanel}>
           <Pressable
-            onPress={() => router.push('/rental-overview')}
+            onPress={() => router.push('/(council)/rental/overview')}
             style={({ pressed }) => [styles.panelButtonPrimary, pressed && styles.panelButtonPrimaryPressed]}
           >
             <Ionicons name="bar-chart" size={18} color="#fff" style={{ marginRight: 8 }} />
@@ -182,7 +182,7 @@ export default function RentalTab() {
           </Pressable>
 
           <Pressable
-            onPress={() => router.push('/rental-add')}
+            onPress={() => router.push('/(council)/rental/add')}
             style={({ pressed }) => [styles.panelButtonGhost, pressed && styles.panelButtonGhostPressed]}
           >
             <Ionicons name="add-circle" size={18} color={COLORS.primary} style={{ marginRight: 8 }} />

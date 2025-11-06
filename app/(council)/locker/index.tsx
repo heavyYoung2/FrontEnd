@@ -14,7 +14,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '@/src/design/colors';
-import { TYPO } from '@/src/design/typography';
 import { fetchLockersBySection, LockerInfoApi, LockerStatusApi } from '@/src/api/locker';
 
 const SECTION_LIST = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'] as const;
@@ -187,7 +186,7 @@ export default function LockerTab() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.shortcuts}>
           <Pressable
-            onPress={() => router.push('/(council)/locker-applications')}
+            onPress={() => router.push('/(council)/locker/applications')}
             style={({ pressed }) => [styles.shortcutBtn, pressed && styles.shortcutPressed]}
           >
             <Ionicons name="people-outline" size={18} color={COLORS.primary} />
@@ -195,7 +194,7 @@ export default function LockerTab() {
           </Pressable>
 
           <Pressable
-            onPress={() => router.push('/(council)/locker-history')}
+            onPress={() => router.push('/(council)/locker/history')}
             style={({ pressed }) => [styles.shortcutBtn, pressed && styles.shortcutPressed]}
           >
             <Ionicons name="list-outline" size={18} color={COLORS.primary} />
@@ -205,16 +204,16 @@ export default function LockerTab() {
 
         <View style={styles.legendCard}>
           <Text style={styles.legendTitle}>사물함 상태</Text>
-        <View style={styles.legendRow}>
-          {['MY', 'IN_USE', 'AVAILABLE', 'BROKEN'].map((key) => {
-            const theme = STATUS_THEME[key];
-            return (
-              <View key={key} style={[styles.legendChip, { backgroundColor: theme.bg, borderColor: theme.border }]}>
-                <Text style={[styles.legendText, { color: theme.text }]}>{theme.label}</Text>
-              </View>
-            );
-          })}
-        </View>
+          <View style={styles.legendRow}>
+            {['MY', 'IN_USE', 'AVAILABLE', 'BROKEN'].map((key) => {
+              const theme = STATUS_THEME[key];
+              return (
+                <View key={key} style={[styles.legendChip, { backgroundColor: theme.bg, borderColor: theme.border }]}>
+                  <Text style={[styles.legendText, { color: theme.text }]}>{theme.label}</Text>
+                </View>
+              );
+            })}
+          </View>
         </View>
 
         <View style={styles.sectionGrid}>
@@ -320,40 +319,50 @@ function LockerSectionModal({
           {state.status === 'loading' && (
             <View style={styles.modalLoading}>
               <ActivityIndicator size="large" color={COLORS.primary} />
-              <Text style={styles.modalLoadingText}>사물함 정보를 불러오는 중입니다.</Text>
+              <Text style={styles.modalLoadingText}>사물함 정보를 불러오는 중입니다...</Text>
             </View>
           )}
 
           {state.status === 'error' && (
             <View style={styles.modalLoading}>
-              <Text style={[styles.modalLoadingText, { color: COLORS.danger }]}>
-                {state.error ?? '사물함 정보를 가져오지 못했습니다.'}
-              </Text>
+              <Text style={styles.modalLoadingText}>사물함을 불러오지 못했습니다.</Text>
               <Pressable onPress={onReload} style={styles.reloadBtn}>
-                <Ionicons name="refresh" size={16} color="#FFFFFF" />
+                <Ionicons name="reload" size={14} color="#FFFFFF" />
                 <Text style={styles.reloadBtnText}>다시 시도</Text>
               </Pressable>
             </View>
           )}
 
           {state.status === 'loaded' && (
-            <ScrollView contentContainerStyle={styles.lockersWrap}>
-              {state.lockers.map((locker) => {
-                const theme = STATUS_THEME[locker.status.toUpperCase()] ?? STATUS_THEME.IN_USE;
-                return (
-                  <View
-                    key={locker.id}
-                    style={[styles.lockerTile, { backgroundColor: theme.bg, borderColor: theme.border }]}
-                  >
-                    <Text style={[styles.lockerLabel, { color: theme.text }]}>{locker.label}</Text>
-                    <Text style={[styles.lockerStatus, { color: theme.text }]}>{theme.label}</Text>
-                    <Text style={styles.lockerMeta}>{locker.studentId ?? '미배정'}</Text>
-                    {locker.studentName ? (
-                      <Text style={styles.lockerMetaSecondary}>{locker.studentName}</Text>
-                    ) : null}
-                  </View>
-                );
-              })}
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
+              <View style={styles.lockersWrap}>
+                {state.lockers.map((locker) => {
+                  const theme = STATUS_THEME[locker.status.toUpperCase()] ?? STATUS_THEME.AVAILABLE;
+                  return (
+                    <View
+                      key={locker.id}
+                      style={[
+                        styles.lockerTile,
+                        {
+                          borderColor: theme.border,
+                          backgroundColor: theme.bg,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.lockerLabel, { color: theme.text }]}>{locker.label}</Text>
+                      <Text style={[styles.lockerStatus, { color: theme.text }]}>{theme.label}</Text>
+                      {locker.studentName ? (
+                        <>
+                          <Text style={styles.lockerMeta}>{locker.studentName}</Text>
+                          {locker.studentId ? <Text style={styles.lockerMetaSecondary}>{locker.studentId}</Text> : null}
+                        </>
+                      ) : (
+                        <Text style={styles.lockerMetaSecondary}>신청자 없음</Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
             </ScrollView>
           )}
         </View>
@@ -362,67 +371,52 @@ function LockerSectionModal({
   );
 }
 
-function normalizeLockers(raw: LockerInfoApi[], sectionFallback: SectionId): LockerItem[] {
-  return raw.map((item, index) => {
-    const parsedFromName = Number(String(item.lockerName ?? '').replace(/\D/g, ''));
-    const normalizedFromName = Number.isFinite(parsedFromName) && parsedFromName > 0 ? parsedFromName : undefined;
-    const lockerNumber =
-      item.lockerNumber ??
-      item.lockerNum ??
-      item.lockerNo ??
-      item.lockerId ??
-      normalizedFromName ??
-      index + 1;
+function normalizeLockers(raw: LockerInfoApi[], section: SectionId): LockerItem[] {
+  return raw
+    .map((item) => {
+      const sectionId = item.location?.charAt(0);
+      if (!sectionId || !isSectionId(sectionId)) return null;
+      const number = parseInt(item.location.slice(1), 10);
+      if (Number.isNaN(number)) return null;
+      const statusUpper = item.status?.toUpperCase() ?? 'AVAILABLE';
 
-    const rawSection = (
-      item.lockerSection ??
-      item.section ??
-      item.sectionName ??
-      sectionFallback
-    )
-      .toString()
-      .toUpperCase();
+      const base: LockerItem = {
+        id: item.id,
+        label: `${sectionId}-${number}`,
+        number,
+        section: sectionId,
+        status: (statusUpper as LockerStatusApi) ?? 'AVAILABLE',
+      };
 
-    const normalizedSectionChar = rawSection.charAt(0);
-    const normalizedSection = isSectionId(rawSection)
-      ? rawSection
-      : isSectionId(normalizedSectionChar)
-        ? (normalizedSectionChar as SectionId)
-        : sectionFallback;
+      if (item.owner) {
+        base.studentId = item.owner.studentId;
+        base.studentName = item.owner.name;
+      }
 
-    const displayLabel = `${normalizedSection}${lockerNumber}`;
+      if (statusUpper === 'BROKEN') {
+        base.status = 'BROKEN';
+      } else if (statusUpper === 'IN_USE') {
+        base.status = 'IN_USE';
+      } else if (statusUpper === 'MY') {
+        base.status = 'MY';
+      } else {
+        base.status = 'AVAILABLE';
+      }
 
-    const status = (item.lockerStatus ?? 'IN_USE').toString().toUpperCase();
-
-    const studentId =
-      item.studentId ??
-      item.studentNumber ??
-      item.memberNumber ??
-      item.memberId ??
-      undefined;
-
-    const studentName = item.studentName ?? item.memberName ?? item.name ?? undefined;
-
-    return {
-      id: `${rawSection || normalizedSection}-${lockerNumber}`,
-      label: displayLabel,
-      number: lockerNumber,
-      section: normalizedSection,
-      status,
-      studentId,
-      studentName,
-    };
-  });
+      return base;
+    })
+    .filter((item): item is LockerItem => item !== null)
+    .sort((a, b) => a.number - b.number);
 }
 
 function summarizeLockers(lockers: LockerItem[]) {
   return lockers.reduce(
     (acc, locker) => {
       const status = locker.status.toUpperCase();
-      if (status === 'AVAILABLE') acc.available += 1;
-      else if (status === 'BROKEN') acc.broken += 1;
+      if (status === 'IN_USE') acc.inUse += 1;
       else if (status === 'MY') acc.my += 1;
-      else acc.inUse += 1;
+      else if (status === 'AVAILABLE') acc.available += 1;
+      else if (status === 'BROKEN') acc.broken += 1;
       return acc;
     },
     { inUse: 0, available: 0, broken: 0, my: 0 },
@@ -432,13 +426,12 @@ function summarizeLockers(lockers: LockerItem[]) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: COLORS.page,
+    backgroundColor: '#F6F8FD',
   },
   scroll: {
-    paddingHorizontal: 20,
-    paddingBottom: 36,
-    paddingTop: 16,
-    gap: 18,
+    padding: 20,
+    paddingBottom: 140,
+    gap: 24,
   },
   shortcuts: {
     flexDirection: 'row',
@@ -451,56 +444,49 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: COLORS.surface,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
+    borderColor: '#E7EAF2',
+    shadowColor: '#1c2a58',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
     shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
   shortcutPressed: {
-    opacity: 0.9,
+    opacity: 0.85,
   },
   shortcutLabel: {
     fontFamily: 'Pretendard-SemiBold',
-    fontSize: 15,
-    color: COLORS.text,
+    fontSize: 14,
+    color: COLORS.primary,
   },
   legendCard: {
-    borderRadius: 16,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
     padding: 18,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E6F2',
     gap: 12,
   },
   legendTitle: {
-    ...TYPO.subtitle,
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 16,
     color: COLORS.text,
   },
   legendRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    width: '100%',
+    gap: 10,
   },
   legendChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    flexGrow: 1,
-    flexShrink: 1,
-    minWidth: 84,
+    paddingVertical: 6,
   },
   legendText: {
-    fontFamily: 'Pretendard-Medium',
+    fontFamily: 'Pretendard-SemiBold',
     fontSize: 13,
   },
   sectionGrid: {
@@ -509,46 +495,47 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   sectionCard: {
-    flexBasis: '47%',
-    borderRadius: 16,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    width: '48%',
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
     padding: 16,
-    gap: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#E7EAF2',
+    gap: 12,
   },
   sectionCardActive: {
     borderColor: COLORS.primary,
-    shadowOpacity: 0.12,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
   },
   sectionCardPressed: {
-    opacity: 0.93,
+    opacity: 0.9,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   sectionName: {
     fontFamily: 'Pretendard-SemiBold',
-    fontSize: 17,
+    fontSize: 15,
     color: COLORS.text,
   },
   sectionTotal: {
     fontFamily: 'Pretendard-Medium',
+    fontSize: 12,
     color: '#6B7280',
   },
   sectionStack: {
-    gap: 4,
+    gap: 6,
+    marginTop: 4,
   },
   sectionStat: {
-    fontFamily: 'Pretendard-SemiBold',
-    fontSize: 13,
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 12,
   },
   sectionLoadingRow: {
     flexDirection: 'row',
