@@ -6,6 +6,7 @@ import {
   RentalHistoryInfo,
   RentalStatusCode,
 } from '@/src/api/rental';
+import { fetchAvailableItems, ItemCategorySummary } from '@/src/api/items';
 
 export type RentalItemSummary = {
   id: string;
@@ -44,35 +45,37 @@ export type GuidelineSection = {
   lines: string[];
 };
 
-const DASHBOARD_PLACEHOLDER: { items: RentalItemSummary[]; blacklistUntil: string | null } = {
-  items: [
-    {
-      id: 'battery',
-      name: '보조배터리',
-      description: '모든 기종 호환 10,000mAh',
-      totalCount: 20,
-      availableCount: 18,
-      categoryId: 1,
-    },
-    {
-      id: 'umbrella',
-      name: '장우산',
-      description: '우천 대비 장우산',
-      totalCount: 20,
-      availableCount: 12,
-      categoryId: 2,
-    },
-    {
-      id: 'charger',
-      name: '노트북 충전기',
-      description: 'USB-C 고속 충전 지원',
-      totalCount: 12,
-      availableCount: 6,
-      categoryId: 3,
-    },
-  ],
-  blacklistUntil: '2025-08-12',
-};
+const FALLBACK_ITEM_SUMMARIES: RentalItemSummary[] = [
+  {
+    id: 'battery',
+    name: '보조배터리',
+    description: '모든 기종 호환 10,000mAh',
+    totalCount: 20,
+    availableCount: 18,
+    categoryId: 1,
+  },
+  {
+    id: 'umbrella',
+    name: '장우산',
+    description: '우천 대비 장우산',
+    totalCount: 20,
+    availableCount: 12,
+    categoryId: 2,
+  },
+  {
+    id: 'charger',
+    name: '노트북 충전기',
+    description: 'USB-C 고속 충전 지원',
+    totalCount: 12,
+    availableCount: 6,
+    categoryId: 3,
+  },
+];
+
+const FALLBACK_ITEM_BY_ID = new Map(FALLBACK_ITEM_SUMMARIES.map((item) => [item.categoryId, item]));
+const FALLBACK_ITEM_BY_NAME = new Map(FALLBACK_ITEM_SUMMARIES.map((item) => [item.name, item]));
+
+const FALLBACK_BLACKLIST_UNTIL = '2025-08-12';
 
 const RENTAL_STATUS_PLACEHOLDER: MemberRentalInfo = {
   expectedBlacklistUntil: null,
@@ -128,6 +131,25 @@ const RENTAL_HISTORY_PLACEHOLDER: RentalHistoryInfo = {
 
 const ensureError = (err: unknown) =>
   err instanceof Error ? err : new Error(typeof err === 'string' ? err : '알 수 없는 오류가 발생했습니다.');
+
+const toRentalItemSummary = (item: ItemCategorySummary): RentalItemSummary => {
+  const template =
+    FALLBACK_ITEM_BY_ID.get(item.itemCategoryId) ??
+    (typeof item.itemCategoryName === 'string' ? FALLBACK_ITEM_BY_NAME.get(item.itemCategoryName) : undefined);
+
+  const categoryId = item.itemCategoryId ?? template?.categoryId ?? 0;
+  const name = item.itemCategoryName ?? template?.name ?? '알 수 없는 물품';
+  const idSource = item.itemCategoryId ?? template?.categoryId ?? name;
+
+  return {
+    id: String(idSource),
+    name,
+    description: template?.description,
+    totalCount: item.totalCount,
+    availableCount: item.availableCount,
+    categoryId,
+  };
+};
 
 function useRentalStatusQuery() {
   const [data, setData] = useState<MemberRentalInfo>(RENTAL_STATUS_PLACEHOLDER);
@@ -191,6 +213,39 @@ function useRentalHistoryQuery() {
   };
 }
 
+function useRentalItemsQuery() {
+  const [items, setItems] = useState<RentalItemSummary[]>([]);
+  const [isLoading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetchItems = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await fetchAvailableItems();
+      const mapped = result.map(toRentalItemSummary);
+      setItems(mapped.length > 0 ? mapped : []);
+    } catch (err) {
+      const ensured = ensureError(err);
+      setError(ensured);
+      setItems(FALLBACK_ITEM_SUMMARIES);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchItems();
+  }, [fetchItems]);
+
+  return {
+    items,
+    isLoading,
+    error,
+    refetch: fetchItems,
+  };
+}
+
 const toActiveStatus = (status: RentalStatusCode): ActiveRentalStatus | null => {
   if (status === 'OVERDUE') return 'OVERDUE';
   if (status === 'IN_PROGRESS') return 'IN_PROGRESS';
@@ -199,17 +254,26 @@ const toActiveStatus = (status: RentalStatusCode): ActiveRentalStatus | null => 
 
 export function useRentalDashboard() {
   const status = useRentalStatusQuery();
+  const itemsQuery = useRentalItemsQuery();
 
-  return useMemo(
-    () => ({
-      items: DASHBOARD_PLACEHOLDER.items,
-      blacklistUntil: status.data.expectedBlacklistUntil ?? DASHBOARD_PLACEHOLDER.blacklistUntil,
-      statusLoading: status.isLoading,
-      statusError: status.error,
-      refetchStatus: status.refetch,
-    }),
-    [status],
-  );
+  const blacklistUntil = status.data.expectedBlacklistUntil ?? FALLBACK_BLACKLIST_UNTIL;
+  const items =
+    itemsQuery.items.length > 0
+      ? itemsQuery.items
+      : itemsQuery.error
+        ? FALLBACK_ITEM_SUMMARIES
+        : [];
+
+  return {
+    items,
+    itemsLoading: itemsQuery.isLoading,
+    itemsError: itemsQuery.error,
+    refetchItems: itemsQuery.refetch,
+    blacklistUntil,
+    statusLoading: status.isLoading,
+    statusError: status.error,
+    refetchStatus: status.refetch,
+  };
 }
 
 export function useRentalGuidelines() {

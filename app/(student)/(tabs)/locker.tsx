@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Alert,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -110,11 +111,14 @@ function mapStatus(apiStatus: string | undefined): LockerStatus {
 }
 
 export default function StudentLockerScreen() {
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 16);
   const [selectedSection, setSelectedSection] = useState<SectionKey>('A');
   const [sections, setSections] = useState<SectionInfo[]>(createMockSections());
   const [myLocker, setMyLocker] = useState<MyLockerInfoApi | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const statusChips = useMemo(() => (
     (['mine', 'inUse', 'available', 'pending', 'broken'] as LockerStatus[]).map((key) => ({
@@ -123,28 +127,30 @@ export default function StudentLockerScreen() {
     }))
   ), []);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const myInfo = await fetchMyLocker();
-        setMyLocker(myInfo);
+  const loadLocker = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const myInfo = await fetchMyLocker();
+      setMyLocker(myInfo);
 
-        const marked = markMyLocker(createMockSections(), myInfo);
-        setSections(marked);
+      const marked = markMyLocker(createMockSections(), myInfo);
+      setSections(marked);
 
-        if (myInfo?.lockerSection && SECTION_KEYS.includes(myInfo.lockerSection as SectionKey)) {
-          setSelectedSection(myInfo.lockerSection as SectionKey);
-        }
-      } catch (e: any) {
-        setError(e?.response?.data?.message || e?.message || '사물함 정보를 불러오지 못했습니다.');
-        setSections(createMockSections());
-      } finally {
-        setLoading(false);
+      if (myInfo?.lockerSection && SECTION_KEYS.includes(myInfo.lockerSection as SectionKey)) {
+        setSelectedSection(myInfo.lockerSection as SectionKey);
       }
-    })();
+    } catch (e: any) {
+      setError(e?.response?.data?.message || e?.message || '사물함 정보를 불러오지 못했습니다.');
+      setSections(createMockSections());
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadLocker();
+  }, [loadLocker]);
 
   const selectedSectionInfo = useMemo(() => {
     return sections.find((section) => section.key === selectedSection) ?? sections[0];
@@ -200,11 +206,31 @@ export default function StudentLockerScreen() {
     ]);
   };
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadLocker();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadLocker]);
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <CouncilHeader badgeLabel="학생" studentId="C246120" title="나의 사물함" />
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingBottom: bottomInset + 140 }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
+          />
+        }
+      >
         {error && (
           <View style={styles.errorBanner}>
             <Text style={styles.errorText}>{error}</Text>

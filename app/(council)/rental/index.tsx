@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +15,7 @@ import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '@/src/design/colors';
 import { TYPO } from '@/src/design/typography';
 import { useRouter } from 'expo-router';
+import { fetchAvailableItems, ItemCategorySummary } from '@/src/api/items';
 
 type AssetStatus = 'available' | 'rented';
 
@@ -68,10 +70,100 @@ const MOCK_CATEGORY_DATA: RentalCategory[] = [
   },
 ];
 
+const cloneCategory = (category: RentalCategory): RentalCategory => ({
+  ...category,
+  assets: category.assets.map((asset) => ({ ...asset })),
+});
+
+const cloneCategories = (categories: RentalCategory[]) => categories.map(cloneCategory);
+
+const buildCategoryFromSummary = (
+  summary: ItemCategorySummary,
+  template?: RentalCategory,
+): RentalCategory => {
+  const totalCount = Math.max(0, summary.totalCount ?? 0);
+  const availableCount = Math.max(0, Math.min(totalCount, summary.availableCount ?? 0));
+  const id =
+    summary.itemCategoryId != null
+      ? String(summary.itemCategoryId)
+      : template?.id ?? summary.itemCategoryName ?? 'unknown';
+  const name = summary.itemCategoryName ?? template?.name ?? '알 수 없는 물품';
+  const description = template?.description;
+  const templateAssets = template?.assets ?? [];
+
+  const assets: AssetItem[] = Array.from({ length: totalCount }).map((_, idx) => ({
+    id: `${id}-${idx + 1}`,
+    label: templateAssets[idx]?.label ?? `${name} ${idx + 1}`,
+    status: idx < availableCount ? 'available' : 'rented',
+  }));
+
+  return {
+    id,
+    name,
+    description,
+    assets,
+  };
+};
+
+const mapSummariesToCategories = (
+  summaries: ItemCategorySummary[],
+  templateLookup: Map<string, RentalCategory>,
+): RentalCategory[] => {
+  if (summaries.length === 0) return [];
+
+  return summaries.map((summary) => {
+    const template = typeof summary.itemCategoryName === 'string'
+      ? templateLookup.get(summary.itemCategoryName) ?? templateLookup.get(summary.itemCategoryName.trim())
+      : undefined;
+    return buildCategoryFromSummary(summary, template);
+  });
+};
+
 export default function RentalTab() {
   const router = useRouter();
-  const [categories, setCategories] = useState<RentalCategory[]>(MOCK_CATEGORY_DATA);
+  const [categories, setCategories] = useState<RentalCategory[]>([]);
   const [modalState, setModalState] = useState<ModalState>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const templateLookup = useMemo(() => {
+    const lookup = new Map<string, RentalCategory>();
+    MOCK_CATEGORY_DATA.forEach((category) => lookup.set(category.name, category));
+    return lookup;
+  }, []);
+
+  const loadCategories = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const summaries = await fetchAvailableItems();
+      if (summaries.length === 0) {
+        setCategories([]);
+      } else {
+        const mapped = mapSummariesToCategories(summaries, templateLookup);
+        setCategories(mapped);
+      }
+    } catch (err) {
+      console.warn('[council rental] fetch available items failed', err);
+      setError(err instanceof Error ? err : new Error('물품 정보를 불러오지 못했습니다.'));
+      setCategories(cloneCategories(MOCK_CATEGORY_DATA));
+    } finally {
+      setLoading(false);
+    }
+  }, [templateLookup]);
+
+  useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadCategories();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadCategories]);
 
   const totals = useMemo(() => {
     const totalItems = categories.reduce((sum, cat) => sum + cat.assets.length, 0);
@@ -140,11 +232,31 @@ export default function RentalTab() {
         )}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
+          />
+        }
+      >
+        {error ? (
+          <Pressable style={styles.errorBanner} onPress={handleRefresh} hitSlop={8}>
+            <Ionicons name="warning-outline" size={16} color={COLORS.danger} style={{ marginRight: 8 }} />
+            <Text style={styles.errorText}>{error.message}</Text>
+            <Ionicons name="refresh" size={16} color={COLORS.danger} />
+          </Pressable>
+        ) : null}
+
         <View style={styles.overviewCard}>
           <View>
             <Text style={styles.overviewTitle}>현재 대여 현황</Text>
-            <Text style={styles.overviewSubtitle}>실시간으로 반납/대여 상황을 확인하세요</Text>
+            <Text style={styles.overviewSubtitle}>
+              {loading ? '물품 정보를 불러오는 중입니다...' : '실시간으로 반납/대여 상황을 확인하세요'}
+            </Text>
           </View>
           <View style={styles.overviewStatsRow}>
             <View style={styles.overviewStatBox}>
@@ -171,6 +283,14 @@ export default function RentalTab() {
             onManageAssets={() => handleManageAssets(category)}
           />
         ))}
+
+        {!loading && categories.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="cube-outline" size={22} color={COLORS.textMuted} style={{ marginBottom: 8 }} />
+            <Text style={styles.emptyText}>등록된 물품이 없습니다.</Text>
+            <Text style={styles.emptySubText}>새 물품을 추가하거나 목록을 새로고침하세요.</Text>
+          </View>
+        ) : null}
 
         <View style={styles.actionPanel}>
           <Pressable
@@ -514,6 +634,22 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     gap: 16,
   },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  errorText: {
+    ...TYPO.bodySm,
+    flex: 1,
+    color: COLORS.danger,
+  },
   overviewCard: {
     borderRadius: 16,
     backgroundColor: COLORS.surface,
@@ -725,6 +861,29 @@ const styles = StyleSheet.create({
     fontFamily: 'Pretendard-SemiBold',
     color: COLORS.primary,
     fontSize: 15,
+  },
+  emptyState: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    paddingVertical: 36,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    gap: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  emptyText: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 15,
+    color: COLORS.text,
+  },
+  emptySubText: {
+    ...TYPO.bodySm,
+    color: COLORS.textMuted,
   },
   modalBackdrop: {
     flex: 1,

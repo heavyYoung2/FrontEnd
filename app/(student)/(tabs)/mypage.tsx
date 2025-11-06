@@ -1,8 +1,9 @@
-import React from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +15,7 @@ import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '@/src/design/colors';
 import { TYPO } from '@/src/design/typography';
 import { ActiveRental, useMyActiveRentals } from './rental/hooks';
+import { fetchMemberBlacklist, MemberBlacklistInfo } from '@/src/api/member';
 
 const lockerInfo = {
   number: 'A12번',
@@ -27,10 +29,6 @@ const membershipStatus = {
   checkedAt: '2025-03-10',
 };
 
-const warningSummary: { type: 'none' } | { type: 'blacklist'; until: string } = {
-  type: 'none',
-};
-
 const RENTAL_STATUS_BADGE: Record<
   ActiveRental['status'],
   { label: string; background: string; color: string }
@@ -41,17 +39,76 @@ const RENTAL_STATUS_BADGE: Record<
 
 export default function StudentMyPageScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 16);
   const { rentals, isLoading: rentalsLoading, error: rentalsError, refetch } = useMyActiveRentals();
 
   const hasRentals = rentals.length > 0;
+  const [blacklist, setBlacklist] = useState<MemberBlacklistInfo | null>(null);
+  const [blacklistLoading, setBlacklistLoading] = useState(true);
+  const [blacklistError, setBlacklistError] = useState<Error | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadBlacklist = useCallback(async () => {
+    setBlacklistLoading(true);
+    setBlacklistError(null);
+    try {
+      const data = await fetchMemberBlacklist();
+      setBlacklist(data);
+    } catch (err) {
+      console.warn('[member blacklist] fetch failed', err);
+      setBlacklistError(err instanceof Error ? err : new Error('블랙리스트 정보를 불러오지 못했습니다.'));
+    } finally {
+      setBlacklistLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBlacklist();
+  }, [loadBlacklist]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([refetch(), loadBlacklist()]);
+    } catch (err) {
+      console.warn('[student mypage] refresh failed', err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadBlacklist, refetch]);
+
+  const blacklistView = useMemo(() => {
+    if (blacklistLoading) {
+      return { label: '조회 중...', type: 'loading' as const };
+    }
+    if (blacklistError) {
+      return { label: '불러오기에 실패했어요. 다시 시도해주세요.', type: 'error' as const };
+    }
+    if (!blacklist || !blacklist.blacklisted) {
+      return { label: '경고 없음', type: 'safe' as const };
+    }
+    return {
+      label: blacklist.blacklistUntil ? `블랙리스트 기한 : ${blacklist.blacklistUntil}` : '블랙리스트 대상',
+      type: 'blacklisted' as const,
+    };
+  }, [blacklist, blacklistError, blacklistLoading]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <CouncilHeader badgeLabel="학생" studentId="C246120" title="나의 회비영" />
 
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, { paddingBottom: bottomInset + 200 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
+          />
+        }
       >
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>나의 사물함</Text>
@@ -187,27 +244,47 @@ export default function StudentMyPageScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>경고 누적 조회</Text>
-          <View
-            style={[
-              styles.warningCard,
-              warningSummary.type === 'blacklist' ? styles.warningActive : styles.warningSafe,
-            ]}
-          >
-            <Text
+          {blacklistError ? (
+            <Pressable
+              hitSlop={10}
+              onPress={loadBlacklist}
+              style={[styles.warningCard, styles.warningError]}
+            >
+              <Ionicons name="warning-outline" size={18} color={COLORS.danger} style={{ marginRight: 8 }} />
+              <Text style={[styles.warningText, styles.warningTextError]}>{blacklistView.label}</Text>
+              <Ionicons name="refresh" size={18} color={COLORS.danger} style={{ marginLeft: 8 }} />
+            </Pressable>
+          ) : (
+            <View
               style={[
-                styles.warningText,
-                warningSummary.type === 'blacklist' ? styles.warningTextActive : styles.warningTextSafe,
+                styles.warningCard,
+                blacklistView.type === 'blacklisted'
+                  ? styles.warningActive
+                  : blacklistView.type === 'loading'
+                    ? styles.warningLoading
+                    : styles.warningSafe,
               ]}
             >
-              {warningSummary.type === 'blacklist'
-                ? `블랙리스트 기한 : ${warningSummary.until}`
-                : '경고 없음'}
-            </Text>
-          </View>
+              {blacklistLoading ? (
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              ) : (
+                <Text
+                  style={[
+                    styles.warningText,
+                    blacklistView.type === 'blacklisted'
+                      ? styles.warningTextActive
+                      : styles.warningTextSafe,
+                  ]}
+                >
+                  {blacklistView.label}
+                </Text>
+              )}
+            </View>
+          )}
         </View>
       </ScrollView>
 
-      <View style={styles.fabColumn}>
+      <View style={[styles.fabColumn, { bottom: bottomInset + 104 }]}>
         <Pressable
           hitSlop={10}
           onPress={() => router.push('/(student)/settings')}
@@ -399,8 +476,20 @@ const styles = StyleSheet.create({
   warningSafe: {
     backgroundColor: '#EEF2FF',
   },
+  warningLoading: {
+    backgroundColor: '#F3F4F6',
+  },
   warningActive: {
     backgroundColor: 'rgba(239, 68, 68, 0.12)',
+  },
+  warningError: {
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   warningText: {
     fontFamily: 'Pretendard-SemiBold',
@@ -411,6 +500,10 @@ const styles = StyleSheet.create({
   },
   warningTextActive: {
     color: COLORS.danger,
+  },
+  warningTextError: {
+    color: COLORS.danger,
+    flex: 1,
   },
   fabColumn: {
     position: 'absolute',
