@@ -32,10 +32,7 @@ type RentalCategory = {
   assets: AssetItem[];
 };
 
-type ModalState =
-  | { type: 'quantity'; category: RentalCategory }
-  | { type: 'assets'; category: RentalCategory }
-  | null;
+type ModalState = { type: 'assets'; category: RentalCategory } | null;
 
 const MOCK_CATEGORY_DATA: RentalCategory[] = [
   {
@@ -210,10 +207,6 @@ export default function RentalTab() {
     Alert.alert('반납 처리 완료', `${category.name} - ${target.label} 반납으로 처리되었습니다.`);
   };
 
-  const handleQuantityChange = (category: RentalCategory) => {
-    setModalState({ type: 'quantity', category });
-  };
-
   const handleManageAssets = (category: RentalCategory) => {
     setModalState({ type: 'assets', category });
   };
@@ -277,7 +270,6 @@ export default function RentalTab() {
           <CategoryCard
             key={category.id}
             category={category}
-            onQuantity={() => handleQuantityChange(category)}
             onReturn={() => handleReturn(category)}
             onRent={() => handleRent(category)}
             onManageAssets={() => handleManageAssets(category)}
@@ -311,18 +303,6 @@ export default function RentalTab() {
         </View>
       </ScrollView>
 
-      {modalState?.type === 'quantity' && (
-        <QuantityModal
-          visible
-          category={modalState.category}
-          onClose={closeModal}
-          onSubmit={(nextTotal) => {
-            updateCategory(modalState.category.id, (cat) => adjustCategoryQuantity(cat, nextTotal));
-            closeModal();
-          }}
-        />
-      )}
-
       {modalState?.type === 'assets' && (
         <ManageAssetsModal
           visible
@@ -343,13 +323,12 @@ export default function RentalTab() {
 
 type CategoryCardProps = {
   category: RentalCategory;
-  onQuantity: () => void;
   onReturn: () => void;
   onRent: () => void;
   onManageAssets: () => void;
 };
 
-function CategoryCard({ category, onQuantity, onReturn, onRent, onManageAssets }: CategoryCardProps) {
+function CategoryCard({ category, onReturn, onRent, onManageAssets }: CategoryCardProps) {
   const total = category.assets.length;
   const available = category.assets.filter((asset) => asset.status === 'available').length;
   const rented = total - available;
@@ -385,9 +364,28 @@ function CategoryCard({ category, onQuantity, onReturn, onRent, onManageAssets }
       </View>
 
       <View style={styles.categoryActionsRow}>
-        <GhostButton label="수량 변경" icon="create-outline" onPress={onQuantity} />
-        <GhostButton label="반납 처리" icon="arrow-undo" onPress={onReturn} />
-        <PrimaryGhostButton label="대여 처리" icon="arrow-redo" onPress={onRent} />
+        <Pressable
+          onPress={onReturn}
+          style={({ pressed }) => [
+            styles.actionButton,
+            styles.returnButton,
+            pressed && styles.actionButtonPressed,
+          ]}
+        >
+          <Ionicons name="arrow-undo" size={16} color={COLORS.primary} style={{ marginRight: 6 }} />
+          <Text style={[styles.actionButtonText, styles.returnButtonText]}>반납 처리</Text>
+        </Pressable>
+        <Pressable
+          onPress={onRent}
+          style={({ pressed }) => [
+            styles.actionButton,
+            styles.rentButton,
+            pressed && styles.actionButtonPressed,
+          ]}
+        >
+          <Ionicons name="arrow-redo" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+          <Text style={[styles.actionButtonText, styles.rentButtonText]}>대여 처리</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -407,129 +405,6 @@ function StatPill({ label, value, tone = 'default' }: StatPillProps) {
       <Text style={[styles.statPillValue, { color: toneColor }]}>{value}</Text>
     </View>
   );
-}
-
-type GhostButtonProps = {
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  onPress: () => void;
-};
-
-function GhostButton({ label, icon, onPress }: GhostButtonProps) {
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.ghostButton, pressed && styles.ghostButtonPressed]}>
-      <Ionicons name={icon} size={16} color={COLORS.text} style={{ marginRight: 6 }} />
-      <Text style={styles.ghostButtonText}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function PrimaryGhostButton({ label, icon, onPress }: GhostButtonProps) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.primaryGhostButton, pressed && styles.primaryGhostButtonPressed]}
-    >
-      <Ionicons name={icon} size={16} color={COLORS.primary} style={{ marginRight: 6 }} />
-      <Text style={[styles.ghostButtonText, { color: COLORS.primary }]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-type QuantityModalProps = {
-  visible: boolean;
-  category: RentalCategory;
-  onClose: () => void;
-  onSubmit: (nextTotal: number) => void;
-};
-
-function QuantityModal({ visible, category, onClose, onSubmit }: QuantityModalProps) {
-  const rentedCount = category.assets.filter((asset) => asset.status === 'rented').length;
-  const [count, setCount] = useState(category.assets.length);
-
-  const decrementDisabled = count <= rentedCount;
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <View style={styles.modalCard}>
-          <Text style={styles.modalTitle}>수량 변경</Text>
-          <Text style={styles.modalSubtitle}>
-            {category.name}의 총 수량을 조정하세요. 현재 대여 중 {rentedCount}개는 유지됩니다.
-          </Text>
-
-          <View style={styles.stepperRow}>
-            <Pressable
-              onPress={() => !decrementDisabled && setCount((prev) => Math.max(prev - 1, rentedCount))}
-              style={[styles.stepperButton, decrementDisabled && styles.stepperButtonDisabled]}
-            >
-              <Ionicons name="remove" size={18} color={decrementDisabled ? COLORS.textMuted : COLORS.text} />
-            </Pressable>
-            <Text style={styles.stepperValue}>{count}</Text>
-            <Pressable
-              onPress={() => setCount((prev) => Math.min(prev + 1, 200))}
-              style={styles.stepperButton}
-            >
-              <Ionicons name="add" size={18} color={COLORS.text} />
-            </Pressable>
-          </View>
-
-          <Pressable
-            onPress={() => {
-              if (count < rentedCount) {
-                Alert.alert('수량 변경', '대여 중인 물품보다 적게 설정할 수 없습니다.');
-                return;
-              }
-              onSubmit(count);
-            }}
-            style={({ pressed }) => [styles.modalPrimaryBtn, pressed && styles.modalPrimaryBtnPressed]}
-          >
-            <Text style={styles.modalPrimaryText}>적용하기</Text>
-          </Pressable>
-
-          <Pressable onPress={onClose} style={({ pressed }) => [styles.modalGhostBtn, pressed && styles.modalGhostBtnPressed]}>
-            <Text style={styles.modalGhostText}>닫기</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-function adjustCategoryQuantity(category: RentalCategory, targetTotal: number): RentalCategory {
-  const currentAssets = category.assets;
-  const rented = currentAssets.filter((asset) => asset.status === 'rented');
-  const available = currentAssets.filter((asset) => asset.status === 'available');
-
-  if (targetTotal === currentAssets.length) return category;
-
-  if (targetTotal < currentAssets.length) {
-    // Remove from available first, keeping rented items untouched
-    const itemsToRemove = currentAssets.length - targetTotal;
-    const updatedAvailable = available.slice(0, Math.max(available.length - itemsToRemove, 0));
-    const neededRemovalFromRented = Math.max(itemsToRemove - available.length, 0);
-    const updatedRented = rented.slice(0, rented.length - neededRemovalFromRented);
-    const nextAssets = [...updatedAvailable, ...updatedRented];
-    return {
-      ...category,
-      assets: nextAssets,
-    };
-  }
-
-  const itemsToAdd = targetTotal - currentAssets.length;
-  const nextAssets = [...currentAssets];
-  for (let i = 0; i < itemsToAdd; i += 1) {
-    const nextIdx = currentAssets.length + i + 1;
-    nextAssets.push({
-      id: `${category.id}-auto-${Date.now()}-${i}`,
-      label: `${category.name} ${nextIdx}`,
-      status: 'available',
-    });
-  }
-  return {
-    ...category,
-    assets: nextAssets,
-  };
 }
 
 type ManageAssetsModalProps = {
@@ -781,39 +656,41 @@ const styles = StyleSheet.create({
   },
   categoryActionsRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 12,
   },
-  ghostButton: {
+  actionButton: {
     flex: 1,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
+    borderRadius: 14,
+    paddingVertical: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ghostButtonPressed: {
-    opacity: 0.85,
-  },
-  ghostButtonText: {
-    fontFamily: 'Pretendard-SemiBold',
-    color: COLORS.text,
-  },
-  primaryGhostButton: {
-    flex: 1,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    backgroundColor: '#EEF2FF',
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryGhostButtonPressed: {
+  actionButtonPressed: {
     opacity: 0.9,
+  },
+  actionButtonText: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 15,
+  },
+  returnButton: {
+    backgroundColor: COLORS.blue100,
+    borderWidth: 1,
+    borderColor: 'rgba(46, 70, 240, 0.35)',
+  },
+  returnButtonText: {
+    color: COLORS.primary,
+  },
+  rentButton: {
+    backgroundColor: COLORS.primary,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  rentButtonText: {
+    color: '#FFFFFF',
   },
   actionPanel: {
     borderRadius: 20,
@@ -907,45 +784,6 @@ const styles = StyleSheet.create({
   modalSubtitle: {
     ...TYPO.bodySm,
     color: COLORS.textMuted,
-  },
-  stepperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 20,
-  },
-  stepperButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: COLORS.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  stepperButtonDisabled: {
-    opacity: 0.4,
-  },
-  stepperValue: {
-    fontFamily: 'Pretendard-Bold',
-    fontSize: 24,
-    color: COLORS.text,
-  },
-  modalPrimaryBtn: {
-    borderRadius: 14,
-    backgroundColor: COLORS.primary,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalPrimaryBtnPressed: {
-    opacity: 0.92,
-  },
-  modalPrimaryText: {
-    fontFamily: 'Pretendard-SemiBold',
-    color: '#FFFFFF',
-    fontSize: 15,
   },
   modalGhostBtn: {
     borderRadius: 12,

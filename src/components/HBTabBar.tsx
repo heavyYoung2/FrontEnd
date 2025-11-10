@@ -183,7 +183,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     paddingVertical: 12,
-    paddingBottom: 20,
+    paddingBottom: 10,
     gap: 6,
   },
   itemPressed: { opacity: 0.65 },

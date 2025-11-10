@@ -16,17 +16,12 @@ import { COLORS } from '@/src/design/colors';
 import { TYPO } from '@/src/design/typography';
 import { ActiveRental, useMyActiveRentals } from './rental/hooks';
 import { fetchMemberBlacklist, MemberBlacklistInfo } from '@/src/api/member';
+import { generateStudentFeeQrToken, StudentFeeStatus } from '@/src/api/studentFee';
 
 const lockerInfo = {
   number: 'A12번',
   statusLabel: '대여중',
   assignedAt: '2025-07-01',
-};
-
-const membershipStatus = {
-  paid: true,
-  label: '납부',
-  checkedAt: '2025-03-10',
 };
 
 const RENTAL_STATUS_BADGE: Record<
@@ -47,6 +42,9 @@ export default function StudentMyPageScreen() {
   const [blacklist, setBlacklist] = useState<MemberBlacklistInfo | null>(null);
   const [blacklistLoading, setBlacklistLoading] = useState(true);
   const [blacklistError, setBlacklistError] = useState<Error | null>(null);
+  const [feeStatus, setFeeStatus] = useState<StudentFeeStatus | null>(null);
+  const [feeStatusLoading, setFeeStatusLoading] = useState(true);
+  const [feeStatusCheckedAt, setFeeStatusCheckedAt] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadBlacklist = useCallback(async () => {
@@ -63,20 +61,34 @@ export default function StudentMyPageScreen() {
     }
   }, []);
 
+  const loadStudentFeeStatus = useCallback(async () => {
+    setFeeStatusLoading(true);
+    try {
+      const result = await generateStudentFeeQrToken();
+      setFeeStatus(result.studentFeeStatus);
+      setFeeStatusCheckedAt(new Date().toISOString().slice(0, 10));
+    } catch (err) {
+      console.warn('[student fee status] fetch failed', err);
+    } finally {
+      setFeeStatusLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadBlacklist();
-  }, [loadBlacklist]);
+    loadStudentFeeStatus();
+  }, [loadBlacklist, loadStudentFeeStatus]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.all([refetch(), loadBlacklist()]);
+      await Promise.all([refetch(), loadBlacklist(), loadStudentFeeStatus()]);
     } catch (err) {
       console.warn('[student mypage] refresh failed', err);
     } finally {
       setRefreshing(false);
     }
-  }, [loadBlacklist, refetch]);
+  }, [loadBlacklist, loadStudentFeeStatus, refetch]);
 
   const blacklistView = useMemo(() => {
     if (blacklistLoading) {
@@ -93,6 +105,15 @@ export default function StudentMyPageScreen() {
       type: 'blacklisted' as const,
     };
   }, [blacklist, blacklistError, blacklistLoading]);
+
+  const membershipBadge = feeStatusLoading
+    ? { label: '납부 완료', background: COLORS.blue100, color: COLORS.primary }
+    : feeStatus === 'PAID'
+      ? { label: '납부 완료', background: COLORS.blue100, color: COLORS.primary }
+      : feeStatus === 'NOT_PAID'
+        ? { label: '미납', background: 'rgba(239, 68, 68, 0.12)', color: COLORS.danger }
+        : { label: '확인전', background: COLORS.border, color: COLORS.textMuted };
+  const showMembershipButton = !feeStatusLoading && feeStatus !== 'PAID';
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -212,21 +233,22 @@ export default function StudentMyPageScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>학생 회비 납부 확인</Text>
           <View style={styles.card}>
-            <View style={styles.cardRow}>
-              <Text style={styles.metaLabel}>학생 회비 납부 여부</Text>
-              <View style={[styles.statusPill, styles.statusSuccess]}>
-                <Text style={styles.statusPillText}>{membershipStatus.label}</Text>
+            <Text style={styles.metaLabel}>학생 회비 납부 여부</Text>
+            <View style={styles.membershipStatusRow}>
+              <View style={[styles.membershipStatusBadge, { backgroundColor: membershipBadge.background }]}>
+                <Text style={[styles.membershipStatusText, { color: membershipBadge.color }]}>{membershipBadge.label}</Text>
               </View>
+              {showMembershipButton ? (
+                <Pressable
+                  hitSlop={10}
+                  onPress={() => router.push('/(student)/(tabs)/qr')}
+                  style={({ pressed }) => [styles.membershipButton, pressed && { opacity: 0.92 }]}
+                >
+                  <Text style={styles.membershipButtonText}>확인하기</Text>
+                </Pressable>
+              ) : null}
             </View>
-            <Text style={styles.meta}>마지막 확인일 : {membershipStatus.checkedAt}</Text>
-
-            <Pressable
-              hitSlop={10}
-              onPress={() => router.push('/(student)/dues-check')}
-              style={({ pressed }) => [styles.primaryButton, pressed && styles.pressedPrimary]}
-            >
-              <Text style={styles.primaryButtonText}>확인하기</Text>
-            </Pressable>
+            <Text style={styles.meta}>마지막 확인일 : {feeStatusCheckedAt ?? '-'}</Text>
           </View>
         </View>
 
@@ -358,8 +380,33 @@ const styles = StyleSheet.create({
   statusActive: {
     backgroundColor: '#EEF2FF',
   },
-  statusSuccess: {
-    backgroundColor: 'rgba(34, 197, 94, 0.12)',
+  membershipStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  membershipStatusBadge: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  membershipStatusText: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 16,
+    color: COLORS.text,
+  },
+  membershipButton: {
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    backgroundColor: COLORS.primary,
+  },
+  membershipButtonText: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 15,
+    color: '#FFFFFF',
   },
   statusPillText: {
     fontFamily: 'Pretendard-SemiBold',
@@ -429,22 +476,6 @@ const styles = StyleSheet.create({
   },
   pressedSecondary: {
     opacity: 0.9,
-  },
-  primaryButton: {
-    marginTop: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-    backgroundColor: COLORS.primary,
-    paddingVertical: 14,
-  },
-  primaryButtonText: {
-    fontFamily: 'Pretendard-SemiBold',
-    fontSize: 15,
-    color: '#FFFFFF',
-  },
-  pressedPrimary: {
-    opacity: 0.92,
   },
   emptyText: {
     fontFamily: 'Pretendard-Medium',

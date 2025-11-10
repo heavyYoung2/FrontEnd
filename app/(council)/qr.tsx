@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, BarcodeScanningResult, useCameraPermissions } from 'expo-camera';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import * as Speech from 'expo-speech';
+import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -11,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CouncilHeader from '@/components/CouncilHeader';
+import { verifyStudentFeeByQrToken } from '@/src/api/studentFeeAdmin';
 import { COLORS } from '../../src/design/colors';
 import { TYPO } from '../../src/design/typography';
 
@@ -50,6 +52,7 @@ type StateUi = {
 
 const INSTRUCTION = '카메라에 QR코드를 스캔해주세요.';
 const SCAN_RESET_DELAY = 1100;
+const AUTO_RESET_DELAY = 7000;
 
 const CHIP_TONE = {
   primary: { background: COLORS.blue100, color: COLORS.primary },
@@ -71,6 +74,8 @@ export default function QrTab() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanState, setScanState] = useState<ScanState>({ type: 'idle' });
   const [lastScanTs, setLastScanTs] = useState<number>(0);
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [koreanMaleVoiceId, setKoreanMaleVoiceId] = useState<string | null>(null);
   const processingRef = useRef(false);
   const lockedRef = useRef(false);
 
@@ -91,34 +96,35 @@ export default function QrTab() {
 
   const evaluateResult = useCallback(async (data: string) => {
     const trimmed = data.trim();
-
-    // 데모 로직: 특정 키워드 포함 여부로 승인/거부 시뮬레이션
-    // 실제 API 연동 시 이 부분을 서버 호출로 교체한다.
-    await new Promise((resolve) => setTimeout(resolve, 600));
-
     if (!trimmed) {
       lockedRef.current = true;
-      setScanState({ type: 'invalid', payload: { message: '올바르지 않은 형식입니다.', raw: trimmed } });
-      return;
-    }
-
-    if (/approved|pass|allow/i.test(trimmed)) {
-      lockedRef.current = true;
-      setScanState({ type: 'success', payload: { raw: trimmed } });
-      return;
-    }
-
-    if (/dues|미납|overdue/i.test(trimmed)) {
-      lockedRef.current = true;
       setScanState({
-        type: 'denied',
-        payload: { reason: '사유: 학생회비 미납 대상', raw: trimmed },
+        type: 'invalid',
+        payload: { message: '올바른 QR 코드가 아니에요.', raw: trimmed },
       });
       return;
     }
 
-    lockedRef.current = true;
-    setScanState({ type: 'invalid', payload: { message: '올바르지 않은 형식입니다.', raw: trimmed } });
+    try {
+      const approved = await verifyStudentFeeByQrToken(trimmed);
+      lockedRef.current = true;
+      if (approved) {
+        setScanState({ type: 'success', payload: { raw: trimmed } });
+      } else {
+        setScanState({
+          type: 'denied',
+          payload: { reason: '사유: 학생회비 미납 대상', raw: trimmed },
+        });
+      }
+    } catch (err) {
+      lockedRef.current = true;
+      const message =
+        err instanceof Error && err.message ? err.message : '학생회비 정보를 확인할 수 없어요. 다시 시도해주세요.';
+      setScanState({
+        type: 'invalid',
+        payload: { message, raw: trimmed },
+      });
+    }
   }, []);
 
   const onBarCodeScanned = useCallback(
@@ -223,6 +229,61 @@ export default function QrTab() {
     }
   }, [scanState]);
 
+  const showInlineReset =
+    scanState.type === 'success' || scanState.type === 'denied' || scanState.type === 'invalid';
+
+  const toggleSound = useCallback(() => {
+    setSoundEnabled((prev) => !prev);
+  }, []);
+
+  useEffect(() => {
+    const loadVoices = async () => {
+      try {
+        const voices = await Speech.getAvailableVoicesAsync();
+        const koreanVoices = voices.filter((voice) => voice.language?.startsWith('ko'));
+        const smoothMaleVoice =
+          koreanVoices.find((voice) => /male|남자|남성|ho|hun|hyun|joon|min/i.test(`${voice.name}${voice.identifier}`)) ??
+          koreanVoices[0];
+        if (smoothMaleVoice) {
+          setKoreanMaleVoiceId(smoothMaleVoice.identifier);
+        }
+      } catch (err) {
+        console.warn('[QR] Failed to load speech voices', err);
+      }
+    };
+
+    loadVoices();
+  }, []);
+
+  useEffect(() => {
+    if (!soundEnabled) {
+      Speech.stop();
+      return;
+    }
+
+    if (scanState.type === 'success') {
+      Speech.stop();
+      Speech.speak('확인되었습니다', {
+        language: 'ko-KR',
+        pitch: 0.92,
+        rate: 0.92,
+        voice: koreanMaleVoiceId ?? undefined,
+      });
+    }
+
+    return () => {
+      Speech.stop();
+    };
+  }, [koreanMaleVoiceId, scanState, soundEnabled]);
+
+  useEffect(() => {
+    if (!showInlineReset) return;
+    const timer = setTimeout(() => {
+      resetState();
+    }, AUTO_RESET_DELAY);
+    return () => clearTimeout(timer);
+  }, [resetState, showInlineReset]);
+
   const handlePrimaryAction = useCallback(() => {
     if (scanState.type === 'success') {
       console.log('[QR] 승인 처리', scanState.payload.raw);
@@ -260,6 +321,31 @@ export default function QrTab() {
     content = (
       <View style={styles.content}>
         <Text style={styles.instruction}>{INSTRUCTION}</Text>
+        <View style={styles.soundToggleRow}>
+          <Pressable
+            onPress={toggleSound}
+            hitSlop={10}
+            style={[
+              styles.soundToggleButton,
+              soundEnabled && styles.soundToggleButtonActive,
+            ]}
+          >
+            <Ionicons
+              name={soundEnabled ? 'volume-high' : 'volume-mute'}
+              size={16}
+              color={soundEnabled ? COLORS.primary : COLORS.textMuted}
+              style={{ marginRight: 6 }}
+            />
+            <Text
+              style={[
+                styles.soundToggleText,
+                soundEnabled && styles.soundToggleTextActive,
+              ]}
+            >
+              {soundEnabled ? '소리 ON' : '소리 OFF'}
+            </Text>
+          </Pressable>
+        </View>
 
         <View style={styles.cameraSection}>
           <View style={styles.cameraContainer}>
@@ -282,26 +368,39 @@ export default function QrTab() {
               <View style={[styles.crossLineHorizontal, { backgroundColor: ui.frameColor }]} />
             </View>
 
-            {ui.overlayChip && (
-              <View
-                style={[
-                  styles.overlayChip,
-                  { backgroundColor: CHIP_TONE[ui.overlayChip.tone].background },
-                ]}
-              >
-                {ui.overlayChip.loading ? (
-                  <ActivityIndicator size="small" color={CHIP_TONE[ui.overlayChip.tone].color} />
-                ) : ui.overlayChip.icon ? (
-                  <Ionicons
-                    name={ui.overlayChip.icon}
-                    size={18}
-                    color={CHIP_TONE[ui.overlayChip.tone].color}
-                    style={{ marginRight: 6 }}
-                  />
-                ) : null}
-                <Text style={[styles.overlayChipText, { color: CHIP_TONE[ui.overlayChip.tone].color }]}>
-                  {ui.overlayChip.text}
-                </Text>
+            {(ui.overlayChip || showInlineReset) && (
+              <View style={styles.overlayStack}>
+                {ui.overlayChip && (
+                  <View
+                    style={[
+                      styles.overlayChip,
+                      { backgroundColor: CHIP_TONE[ui.overlayChip.tone].background },
+                    ]}
+                  >
+                    {ui.overlayChip.loading ? (
+                      <ActivityIndicator size="small" color={CHIP_TONE[ui.overlayChip.tone].color} />
+                    ) : ui.overlayChip.icon ? (
+                      <Ionicons
+                        name={ui.overlayChip.icon}
+                        size={18}
+                        color={CHIP_TONE[ui.overlayChip.tone].color}
+                        style={{ marginRight: 6 }}
+                      />
+                    ) : null}
+                    <Text
+                      style={[styles.overlayChipText, { color: CHIP_TONE[ui.overlayChip.tone].color }]}
+                    >
+                      {ui.overlayChip.text}
+                    </Text>
+                  </View>
+                )}
+
+                {showInlineReset && (
+                  <Pressable onPress={resetState} style={styles.inlineResetButton} hitSlop={8}>
+                    <Ionicons name="refresh" size={16} color={COLORS.primary} style={{ marginRight: 6 }} />
+                    <Text style={styles.inlineResetText}>다시 스캔</Text>
+                  </Pressable>
+                )}
               </View>
             )}
           </View>
@@ -476,9 +575,14 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     opacity: 0.75,
   },
-  overlayChip: {
+  overlayStack: {
     position: 'absolute',
     bottom: 24,
+    width: '100%',
+    alignItems: 'center',
+    gap: 8,
+  },
+  overlayChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 999,
@@ -489,6 +593,26 @@ const styles = StyleSheet.create({
   overlayChipText: {
     ...TYPO.bodySm,
     fontFamily: 'Pretendard-Medium',
+  },
+  inlineResetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  inlineResetText: {
+    ...TYPO.caption,
+    color: COLORS.primary,
+    fontFamily: 'Pretendard-SemiBold',
   },
   messageRow: {
     flexDirection: 'row',
@@ -613,5 +737,30 @@ const styles = StyleSheet.create({
     right: 24,
     borderBottomWidth: 4,
     borderRightWidth: 4,
+  },
+  soundToggleRow: {
+    alignItems: 'flex-end',
+  },
+  soundToggleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.bg,
+  },
+  soundToggleButtonActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.blue100,
+  },
+  soundToggleText: {
+    ...TYPO.caption,
+    color: COLORS.textMuted,
+    fontFamily: 'Pretendard-Medium',
+  },
+  soundToggleTextActive: {
+    color: COLORS.primary,
   },
 });

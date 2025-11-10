@@ -18,30 +18,30 @@ import { COLORS } from '@/src/design/colors';
 export default function RentalAddScreen() {
   const router = useRouter();
   const [name, setName] = useState('');
-  const [total, setTotal] = useState('');
+  const [description, setDescription] = useState('');
 
   const isSubmitDisabled = useMemo(() => {
     const trimmedName = name.trim();
-    const parsedTotal = parseInt(total, 10);
-    return trimmedName.length === 0 || Number.isNaN(parsedTotal) || parsedTotal <= 0;
-  }, [name, total]);
+    const trimmedDescription = description.trim();
+    return trimmedName.length === 0 || trimmedDescription.length === 0;
+  }, [name, description]);
 
   const handleSubmit = () => {
     const trimmedName = name.trim();
-    const parsedTotal = parseInt(total, 10);
+    const trimmedDescription = description.trim();
 
     if (trimmedName.length === 0) {
       Alert.alert('대여 물품 추가', '대여 물품명을 입력해주세요.');
       return;
     }
-    if (Number.isNaN(parsedTotal) || parsedTotal <= 0) {
-      Alert.alert('대여 물품 추가', '대여 물품 총 수량을 1 이상 숫자로 입력해주세요.');
+    if (trimmedDescription.length === 0) {
+      Alert.alert('대여 물품 추가', '물품 설명을 입력해주세요.');
       return;
     }
 
     Alert.alert(
       '대여 물품 추가',
-      `다음과 같은 정보로 대여 물품을 추가하시겠습니까?\n\n대여 물품명 : ${trimmedName}\n대여 총 수량 : ${parsedTotal}개`,
+      `다음과 같은 정보로 대여 물품을 추가하시겠습니까?\n\n대여 물품명 : ${trimmedName}\n설명 : ${trimmedDescription}`,
       [
         { text: '취소', style: 'cancel' },
         {
@@ -92,15 +92,15 @@ export default function RentalAddScreen() {
               returnKeyType="next"
             />
 
-            <Text style={[styles.label, { marginTop: 20 }]}>대여 물품 총 수량을 입력해주세요</Text>
+            <Text style={[styles.label, { marginTop: 20 }]}>물품 설명을 입력해주세요</Text>
             <TextInput
-              value={total}
-              onChangeText={(text) => setTotal(text.replace(/[^0-9]/g, ''))}
-              placeholder="예) 30"
+              value={description}
+              onChangeText={setDescription}
+              placeholder="예) 우천 시 사용 가능한 자동 우산입니다."
               placeholderTextColor={COLORS.textMuted}
-              keyboardType="number-pad"
-              style={styles.input}
-              returnKeyType="done"
+              style={[styles.input, styles.textArea]}
+              multiline
+              textAlignVertical="top"
             />
           </View>
         </ScrollView>
@@ -158,6 +158,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Pretendard-Medium',
     color: COLORS.text,
+  },
+  textArea: {
+    minHeight: 120,
+    paddingTop: 16,
   },
   bottomArea: {
     paddingHorizontal: 20,

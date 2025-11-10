@@ -207,25 +207,25 @@ def main() -> None:
     icon_size = 1024
     icon = make_canvas(icon_size, icon_size, WHITE)
     draw_logo(icon, icon_size, icon_size, scale=icon_size / 980, color=BLUE)
-    write_png(os.path.join(root, 'assets/images/icon-hoebiyoung.png'), icon_size, icon_size, icon)
+    write_png(os.path.join(root, 'assets/images/icon-heavy-young.png'), icon_size, icon_size, icon)
 
     foreground = make_canvas(icon_size, icon_size, TRANSPARENT)
     draw_logo(foreground, icon_size, icon_size, scale=icon_size / 980, color=BLUE)
-    write_png(os.path.join(root, 'assets/images/android-icon-foreground-hoebiyoung.png'), icon_size, icon_size, foreground)
+    write_png(os.path.join(root, 'assets/images/android-icon-foreground-heavy-young.png'), icon_size, icon_size, foreground)
 
     monochrome = make_canvas(icon_size, icon_size, TRANSPARENT)
     draw_logo(monochrome, icon_size, icon_size, scale=icon_size / 980, color=BLACK)
-    write_png(os.path.join(root, 'assets/images/android-icon-monochrome-hoebiyoung.png'), icon_size, icon_size, monochrome)
+    write_png(os.path.join(root, 'assets/images/android-icon-monochrome-heavy-young.png'), icon_size, icon_size, monochrome)
 
     splash_size = 1400
     splash = make_canvas(splash_size, splash_size, WHITE)
     draw_logo(splash, splash_size, splash_size, scale=splash_size / 1100, color=DEEP_BLUE)
-    write_png(os.path.join(root, 'assets/images/splash-icon-hoebiyoung.png'), splash_size, splash_size, splash)
+    write_png(os.path.join(root, 'assets/images/splash-icon-heavy-young.png'), splash_size, splash_size, splash)
 
     favicon_size = 256
     favicon = make_canvas(favicon_size, favicon_size, WHITE)
     draw_logo(favicon, favicon_size, favicon_size, scale=favicon_size / 980, color=BLUE)
-    write_png(os.path.join(root, 'assets/images/favicon-hoebiyoung.png'), favicon_size, favicon_size, favicon)
+    write_png(os.path.join(root, 'assets/images/favicon-heavy-young.png'), favicon_size, favicon_size, favicon)
 
     print('Generated brand assets.')
 

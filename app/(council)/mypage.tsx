@@ -46,7 +46,7 @@ export default function CouncilMyPageScreen() {
 
           <Pressable
             onPress={() => router.push('/settings/guide')}
-            style={({ pressed }) => [styles.fabButton, pressed && { opacity: 0.95 }, { marginTop: 12 }]}
+            style={({ pressed }) => [styles.fabButton, pressed && { opacity: 0.95 }]}
             hitSlop={10}
           >
             <Ionicons name="help-circle-outline" size={20} color={COLORS.primary} />
@@ -102,11 +102,12 @@ const styles = StyleSheet.create({
     right: 24,
     top: 500,
     alignItems: 'center',
+    gap: 12,
   },
   fabButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -114,7 +115,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOpacity: 0.08,
-    shadowRadius: 8,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },

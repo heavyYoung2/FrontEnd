@@ -67,7 +67,7 @@ export default function StudentRentalStatusScreen() {
               return (
                 <View key={rental.id} style={styles.card}>
                   <View style={styles.cardHeader}>
-                    <View>
+                    <View style={styles.cardHeaderInfo}>
                       <Text style={styles.itemName}>{rental.itemName}</Text>
                       <Text style={styles.itemSub}>대여 내역을 확인하고 반납 일정을 지켜주세요.</Text>
                     </View>
@@ -205,6 +205,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  cardHeaderInfo: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    paddingRight: 12,
+  },
   itemName: {
     fontFamily: 'Pretendard-SemiBold',
     fontSize: 17,
@@ -221,6 +227,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
+    flexShrink: 0,
   },
   statusChipText: {
     fontFamily: 'Pretendard-SemiBold',
