@@ -66,11 +66,7 @@ export default function StudentRentalHistoryScreen() {
         ) : (
           records.map((record) => {
             const meta = STATUS_META[record.status];
-
-            const returnLabel = record.returnedAt ? '반납일' : '반납 예정일';
-            const returnValue = record.returnedAt ?? record.expectedReturnAt ?? '-';
-            const secondaryLabel = record.returnedAt && record.expectedReturnAt ? '반납 예정일' : null;
-            const secondaryValue = record.returnedAt && record.expectedReturnAt ? record.expectedReturnAt : null;
+            const returnValue = record.returnedAt ?? '-';
 
             return (
               <View key={record.id} style={styles.historyCard}>
@@ -96,19 +92,11 @@ export default function StudentRentalHistoryScreen() {
                   <View style={styles.metaBlock}>
                     <Ionicons name="alarm-outline" size={16} color={COLORS.danger} style={{ marginRight: 6 }} />
                     <View>
-                      <Text style={styles.metaLabel}>{returnLabel}</Text>
+                      <Text style={styles.metaLabel}>반납일</Text>
                       <Text style={styles.metaValue}>{returnValue}</Text>
                     </View>
                   </View>
                 </View>
-
-                {secondaryLabel && secondaryValue ? (
-                  <View style={styles.secondaryRow}>
-                    <Ionicons name="time-outline" size={16} color={COLORS.textMuted} style={{ marginRight: 6 }} />
-                    <Text style={styles.secondaryLabel}>{secondaryLabel}</Text>
-                    <Text style={styles.secondaryValue}>{secondaryValue}</Text>
-                  </View>
-                ) : null}
               </View>
             );
           })
@@ -242,20 +230,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.text,
     marginTop: 2,
-  },
-  secondaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  secondaryLabel: {
-    fontFamily: 'Pretendard-Medium',
-    fontSize: 12,
-    color: COLORS.textMuted,
-  },
-  secondaryValue: {
-    fontFamily: 'Pretendard-SemiBold',
-    fontSize: 13,
-    color: COLORS.text,
   },
 });

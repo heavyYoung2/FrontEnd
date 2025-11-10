@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   Pressable,
@@ -15,7 +16,13 @@ import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '@/src/design/colors';
 import { TYPO } from '@/src/design/typography';
 import { useRouter } from 'expo-router';
-import { fetchAvailableItems, ItemCategorySummary } from '@/src/api/items';
+import { useFocusEffect } from '@react-navigation/native';
+import {
+  fetchAdminAvailableItems,
+  fetchAdminItemsByCategory,
+  increaseAdminItemQuantity,
+  ItemCategorySummary,
+} from '@/src/api/items';
 
 type AssetStatus = 'available' | 'rented';
 
@@ -133,7 +140,7 @@ export default function RentalTab() {
     setLoading(true);
     setError(null);
     try {
-      const summaries = await fetchAvailableItems();
+      const summaries = await fetchAdminAvailableItems();
       if (summaries.length === 0) {
         setCategories([]);
       } else {
@@ -149,9 +156,11 @@ export default function RentalTab() {
     }
   }, [templateLookup]);
 
-  useEffect(() => {
-    loadCategories();
-  }, [loadCategories]);
+  useFocusEffect(
+    useCallback(() => {
+      loadCategories();
+    }, [loadCategories]),
+  );
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -415,7 +424,16 @@ type ManageAssetsModalProps = {
 };
 
 function ManageAssetsModal({ visible, category, onUpdate, onClose }: ManageAssetsModalProps) {
-  const [draftAssets, setDraftAssets] = useState<AssetItem[]>(category.assets);
+  const { id: categoryId, name: categoryName, assets: categoryAssets } = category;
+  const [draftAssets, setDraftAssets] = useState<AssetItem[]>(categoryAssets);
+  const [isAdding, setIsAdding] = useState(false);
+  const [isLoadingItems, setIsLoadingItems] = useState(true);
+  const [itemsError, setItemsError] = useState<Error | null>(null);
+  const parsedCategoryId = Number(categoryId);
+
+  useEffect(() => {
+    setDraftAssets(categoryAssets);
+  }, [categoryAssets]);
 
   const toggleStatus = (assetId: string) => {
     setDraftAssets((prev) =>
@@ -430,19 +448,119 @@ function ManageAssetsModal({ visible, category, onUpdate, onClose }: ManageAsset
     );
   };
 
-  const handleAddAsset = () => {
-    setDraftAssets((prev) => [
-      ...prev,
-      {
-        id: `${category.id}-new-${Date.now()}`,
-        label: `${category.name} ${prev.length + 1}`,
-        status: 'available',
-      },
-    ]);
+  const fetchCategoryItems = useCallback(async () => {
+    if (!Number.isFinite(parsedCategoryId)) {
+      setItemsError(new Error('카테고리 정보를 확인할 수 없습니다.'));
+      setDraftAssets(categoryAssets);
+      setIsLoadingItems(false);
+      return;
+    }
+
+    setIsLoadingItems(true);
+    setItemsError(null);
+    try {
+      const items = await fetchAdminItemsByCategory(parsedCategoryId, categoryName);
+      if (items.length === 0) {
+        setDraftAssets([]);
+      } else {
+        const mapped = items.map((item, index) => ({
+          id: item.itemId > 0 ? String(item.itemId) : `${categoryId}-${index}`,
+          label: `${item.categoryName || categoryName || '물품'} ${index + 1}`,
+          status: item.rented ? ('rented' as AssetStatus) : ('available' as AssetStatus),
+        }));
+        setDraftAssets(mapped);
+      }
+    } catch (err) {
+      console.warn('[council rental] fetch category items failed', err);
+      setItemsError(err instanceof Error ? err : new Error('물품 목록을 불러오지 못했습니다.'));
+      setDraftAssets(categoryAssets);
+    } finally {
+      setIsLoadingItems(false);
+    }
+  }, [parsedCategoryId, categoryAssets, categoryId, categoryName]);
+
+  useEffect(() => {
+    if (!visible) return;
+    fetchCategoryItems();
+  }, [visible, fetchCategoryItems]);
+
+  const handleAddAsset = async () => {
+    if (!Number.isFinite(parsedCategoryId)) {
+      Alert.alert('물품 추가', '카테고리 정보를 확인할 수 없습니다.');
+      return;
+    }
+
+    try {
+      setIsAdding(true);
+      await increaseAdminItemQuantity(parsedCategoryId);
+      await fetchCategoryItems();
+    } catch (err) {
+      console.warn('[council rental] increase item quantity failed', err);
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : '물품 추가에 실패했습니다. 잠시 후 다시 시도해주세요.';
+      Alert.alert('물품 추가 실패', message);
+    } finally {
+      setIsAdding(false);
+    }
   };
 
   const handleRemoveAsset = (assetId: string) => {
     setDraftAssets((prev) => prev.filter((asset) => asset.id !== assetId));
+  };
+
+  const renderAssetList = () => {
+    if (isLoadingItems) {
+      return (
+        <View style={[styles.assetList, styles.assetListPlaceholder]}>
+          <ActivityIndicator color={COLORS.primary} />
+        </View>
+      );
+    }
+
+    if (itemsError) {
+      return (
+        <View style={[styles.assetList, styles.assetListPlaceholder]}>
+          <Ionicons name="warning-outline" size={20} color={COLORS.danger} style={{ marginBottom: 8 }} />
+          <Text style={styles.assetErrorText}>{itemsError.message}</Text>
+          <Pressable style={styles.assetRetryBtn} onPress={fetchCategoryItems}>
+            <Text style={styles.assetRetryText}>다시 시도</Text>
+          </Pressable>
+        </View>
+      );
+    }
+
+    if (draftAssets.length === 0) {
+      return (
+        <View style={[styles.assetList, styles.assetListPlaceholder]}>
+          <Text style={styles.assetErrorText}>등록된 물품이 없습니다.</Text>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView style={styles.assetList} contentContainerStyle={{ paddingVertical: 4 }}>
+        {draftAssets.map((asset) => (
+          <View key={asset.id} style={styles.assetRow}>
+            <Pressable onPress={() => toggleStatus(asset.id)} style={styles.assetStatusToggle}>
+              <Ionicons
+                name={asset.status === 'available' ? 'checkbox' : 'square-outline'}
+                size={20}
+                color={asset.status === 'available' ? COLORS.primary : COLORS.textMuted}
+              />
+              <Text style={styles.assetLabel}>{asset.label}</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => handleRemoveAsset(asset.id)}
+              style={({ pressed }) => [styles.assetDelete, pressed && { opacity: 0.85 }]}
+            >
+              <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
+            </Pressable>
+          </View>
+        ))}
+      </ScrollView>
+    );
   };
 
   return (
@@ -452,34 +570,26 @@ function ManageAssetsModal({ visible, category, onUpdate, onClose }: ManageAsset
           <Text style={styles.modalTitle}>물품 관리</Text>
           <Text style={styles.modalSubtitle}>{category.name} 상세 목록을 확인하고 상태를 조정하세요.</Text>
 
-          <ScrollView style={styles.assetList} contentContainerStyle={{ paddingVertical: 4 }}>
-            {draftAssets.map((asset) => (
-              <View key={asset.id} style={styles.assetRow}>
-                <Pressable onPress={() => toggleStatus(asset.id)} style={styles.assetStatusToggle}>
-                  <Ionicons
-                    name={asset.status === 'available' ? 'checkbox' : 'square-outline'}
-                    size={20}
-                    color={asset.status === 'available' ? COLORS.primary : COLORS.textMuted}
-                  />
-                  <Text style={styles.assetLabel}>{asset.label}</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => handleRemoveAsset(asset.id)}
-                  style={({ pressed }) => [styles.assetDelete, pressed && { opacity: 0.85 }]}
-                >
-                  <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
-                </Pressable>
-              </View>
-            ))}
-          </ScrollView>
+          {renderAssetList()}
 
           <View style={styles.assetActionsRow}>
             <Pressable
               onPress={handleAddAsset}
-              style={({ pressed }) => [styles.assetActionBtn, pressed && styles.assetActionBtnPressed]}
+              disabled={isAdding}
+              style={({ pressed }) => [
+                styles.assetActionBtn,
+                pressed && styles.assetActionBtnPressed,
+                isAdding && { opacity: 0.6 },
+              ]}
             >
-              <Ionicons name="add" size={16} color={COLORS.primary} style={{ marginRight: 4 }} />
-              <Text style={[styles.assetActionText, { color: COLORS.primary }]}>물품 추가</Text>
+              {isAdding ? (
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              ) : (
+                <>
+                  <Ionicons name="add" size={16} color={COLORS.primary} style={{ marginRight: 4 }} />
+                  <Text style={[styles.assetActionText, { color: COLORS.primary }]}>물품 추가</Text>
+                </>
+              )}
             </Pressable>
             <Pressable
               onPress={() => {
@@ -803,6 +913,18 @@ const styles = StyleSheet.create({
   assetList: {
     maxHeight: 280,
   },
+  assetListPlaceholder: {
+    maxHeight: 280,
+    minHeight: 160,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 16,
+    backgroundColor: COLORS.surface,
+  },
   assetRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -823,6 +945,11 @@ const styles = StyleSheet.create({
   assetLabel: {
     fontFamily: 'Pretendard-Medium',
     color: COLORS.text,
+  },
+  assetErrorText: {
+    ...TYPO.bodySm,
+    color: COLORS.text,
+    textAlign: 'center',
   },
   assetDelete: {
     width: 36,
@@ -864,6 +991,18 @@ const styles = StyleSheet.create({
   },
   assetActionText: {
     fontFamily: 'Pretendard-SemiBold',
+    color: COLORS.primary,
+  },
+  assetRetryBtn: {
+    marginTop: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+  },
+  assetRetryText: {
+    fontFamily: 'Pretendard-Medium',
     color: COLORS.primary,
   },
 });

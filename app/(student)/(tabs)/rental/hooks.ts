@@ -22,8 +22,9 @@ export type ActiveRentalStatus = 'IN_PROGRESS' | 'OVERDUE';
 export type ActiveRental = {
   id: string;
   itemName: string;
-  rentedAt: string;          // ISO 8601 date string
-  expectedReturnAt: string;  // ISO 8601 date string
+  rentedAt: string;          // ISO 8601 date string (display)
+  expectedReturnAt: string;  // ISO 8601 date string (display)
+  returnedAt: string | null;
   status: ActiveRentalStatus;
   rentalHistoryId: number | null;
   itemCategoryId: number | null;
@@ -291,21 +292,29 @@ export function useMyActiveRentals() {
   const status = useRentalStatusQuery();
 
   const rentals = useMemo(() => {
-    return status.data.items
+    const enriched = status.data.items
       .map((item) => {
         const activeStatus = toActiveStatus(item.rentalStatus);
         if (!activeStatus) return null;
+        const rentedRaw = item.rentalStartedAt ?? null;
+        const sortKey = rentedRaw ? Date.parse(rentedRaw) || 0 : 0;
         return {
           id: item.rentalHistoryId != null ? String(item.rentalHistoryId) : `${item.itemName}-${item.rentalStartedAt ?? ''}`,
           itemName: item.itemName,
-          rentedAt: item.rentalStartedAt ?? '-',
+          rentedAt: rentedRaw ?? '-',
           expectedReturnAt: item.expectedReturnAt ?? '-',
+          returnedAt: item.returnedAt ?? null,
           status: activeStatus,
           rentalHistoryId: item.rentalHistoryId,
           itemCategoryId: item.itemCategoryId,
+          sortKey,
         };
       })
-      .filter((item): item is ActiveRental => Boolean(item));
+      .filter((item): item is (ActiveRental & { sortKey: number }) => Boolean(item));
+
+    return enriched
+      .sort((a, b) => b.sortKey - a.sortKey)
+      .map(({ sortKey, ...rest }) => rest);
   }, [status.data.items]);
 
   return {
@@ -321,14 +330,23 @@ export function useRentalHistory() {
   const history = useRentalHistoryQuery();
 
   const records = useMemo<RentalHistoryRecord[]>(() => {
-    return history.data.items.map((item) => ({
-      id: item.rentalHistoryId != null ? String(item.rentalHistoryId) : `${item.itemName}-${item.rentalStartedAt ?? ''}`,
-      itemName: item.itemName,
-      rentedAt: item.rentalStartedAt ?? '-',
-      expectedReturnAt: item.expectedReturnAt ?? null,
-      returnedAt: item.returnedAt ?? null,
-      status: item.rentalStatus,
-    }));
+    const enriched = history.data.items.map((item) => {
+      const rentedRaw = item.rentalStartedAt ?? null;
+      const sortKey = rentedRaw ? Date.parse(rentedRaw) || 0 : 0;
+      return {
+        id: item.rentalHistoryId != null ? String(item.rentalHistoryId) : `${item.itemName}-${item.rentalStartedAt ?? ''}`,
+        itemName: item.itemName,
+        rentedAt: rentedRaw ?? '-',
+        expectedReturnAt: item.expectedReturnAt ?? null,
+        returnedAt: item.returnedAt ?? null,
+        status: item.rentalStatus,
+        sortKey,
+      };
+    });
+
+    return enriched
+      .sort((a, b) => b.sortKey - a.sortKey)
+      .map(({ sortKey, ...rest }) => rest);
   }, [history.data.items]);
 
   return {

@@ -261,9 +261,10 @@ export default function QrTab() {
       return;
     }
 
-    if (scanState.type === 'success') {
+    if (scanState.type === 'success' || scanState.type === 'denied') {
+      const utterance = scanState.type === 'success' ? '확인되었습니다' : '학생회비 미납';
       Speech.stop();
-      Speech.speak('확인되었습니다', {
+      Speech.speak(utterance, {
         language: 'ko-KR',
         pitch: 0.92,
         rate: 0.92,

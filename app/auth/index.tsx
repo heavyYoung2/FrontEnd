@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -14,14 +15,17 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import HoebiyoungLogo from '@/src/components/HoebiyoungLogo';
 import { COLORS } from '@/src/design/colors';
+import { useAuth } from '@/src/auth/AuthProvider';
 
 export default function AuthIndexScreen() {
   const router = useRouter();
+  const { login, role, loading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const showWipAlert = () =>
-    Alert.alert('준비 중입니다', '로그인 연동 전이라 UI만 확인할 수 있어요.');
+    Alert.alert('준비 중입니다', '해당 기능은 곧 제공될 예정이에요.');
 
   const handleSignUp = () => {
     router.push('/auth/sign-up');
@@ -29,6 +33,31 @@ export default function AuthIndexScreen() {
 
   const handleBypass = () => {
     router.replace('/(student)/(tabs)');
+  };
+
+  useEffect(() => {
+    if (loading || !role) {
+      return;
+    }
+    router.replace('/(student)/(tabs)');
+  }, [role, loading, router]);
+
+  const handleLogin = async () => {
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('로그인 정보 확인', '이메일과 비밀번호를 모두 입력해주세요.');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      await login({ email: email.trim(), password });
+      router.replace('/(student)/(tabs)');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '로그인에 실패했습니다.';
+      Alert.alert('로그인 실패', message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -74,10 +103,16 @@ export default function AuthIndexScreen() {
               style={({ pressed }) => [
                 styles.primaryButton,
                 pressed && { opacity: 0.9 },
+                submitting && styles.disabledButton,
               ]}
-              onPress={showWipAlert}
+              onPress={handleLogin}
+              disabled={submitting}
             >
-              <Text style={styles.primaryButtonText}>로그인</Text>
+              {submitting ? (
+                <ActivityIndicator color={COLORS.bg} />
+              ) : (
+                <Text style={styles.primaryButtonText}>로그인</Text>
+              )}
             </Pressable>
             <Pressable
               style={({ pressed }) => [
@@ -174,6 +209,9 @@ const styles = StyleSheet.create({
     color: COLORS.bg,
     fontSize: 15,
     fontFamily: 'Pretendard-SemiBold',
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
   secondaryButton: {
     flex: 1,

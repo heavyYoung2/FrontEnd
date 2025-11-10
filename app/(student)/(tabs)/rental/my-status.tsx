@@ -88,7 +88,7 @@ export default function StudentRentalStatusScreen() {
                     <View style={styles.metaItem}>
                       <Ionicons name="alarm-outline" size={16} color={COLORS.danger} style={{ marginRight: 8 }} />
                       <View>
-                        <Text style={styles.metaLabel}>반납 마감</Text>
+                        <Text style={styles.metaLabel}>반납 예정일</Text>
                         <Text style={styles.metaValue}>{rental.expectedReturnAt}</Text>
                       </View>
                     </View>

@@ -93,6 +93,19 @@ const toNullableNumber = (value: unknown): number | null => {
   return Number.isFinite(num) ? num : null;
 };
 
+const pickExpectedReturnAt = (record: Record<string, unknown>): string | null => {
+  if (!record) return null;
+  return (
+    toNullableString(
+      record.rentalEndedAt ??
+        record.rentalEndDate ??
+        record.expectedReturnAt ??
+        record.returnDueDate ??
+        record.returnDueDateAt,
+    ) ?? null
+  );
+};
+
 const normalizeRentalStatus = (value: unknown): RentalStatusCode => {
   if (typeof value !== 'string') return 'IN_PROGRESS';
   const upper = value.toUpperCase();
@@ -132,7 +145,7 @@ const normalizeMemberRentalItem = (input: unknown): MemberRentalItem => {
     itemCategoryId: toNullableNumber(record.itemCategoryId),
     itemName: toNullableString(record.itemName) ?? '알 수 없는 물품',
     rentalStartedAt: toNullableString(record.rentalStartedAt),
-    expectedReturnAt: toNullableString(record.expectedReturnAt ?? record.returnDueDate),
+    expectedReturnAt: pickExpectedReturnAt(record),
     returnedAt: toNullableString(record.returnedAt),
     rentalStatus: normalizeRentalStatus(record.rentalStatus),
   };
@@ -194,7 +207,7 @@ const normalizeRentalHistoryItem = (input: unknown): RentalHistoryItem => {
     rentalHistoryId: toNullableNumber(record.rentalHistoryId),
     itemName: toNullableString(record.itemName) ?? '알 수 없는 물품',
     rentalStartedAt: toNullableString(record.rentalStartedAt),
-    expectedReturnAt: toNullableString(record.expectedReturnAt ?? record.returnDueDate),
+    expectedReturnAt: pickExpectedReturnAt(record),
     returnedAt: toNullableString(record.returnedAt),
     rentalStatus: normalizeRentalStatus(record.rentalStatus),
   };

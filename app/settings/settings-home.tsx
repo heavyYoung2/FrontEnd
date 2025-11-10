@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import CouncilHeader from '@/components/CouncilHeader';
+import { useAuth } from '@/src/auth/AuthProvider';
 
 /** 디자인 토큰 */
 const COLORS = {
@@ -25,6 +26,7 @@ const COLORS = {
 
 export default function MyPageScreen() {
   const router = useRouter();
+  const { logout } = useAuth();
 
   const onLogout = () => {
     Alert.alert('로그아웃', '정말 로그아웃 하시겠어요?', [
@@ -32,9 +34,12 @@ export default function MyPageScreen() {
       {
         text: '로그아웃',
         style: 'destructive',
-        onPress: () => {
-          // TODO: signOut()
-          router.replace('/auth');
+        onPress: async () => {
+          try {
+            await logout();
+          } finally {
+            router.replace('/auth');
+          }
         },
       },
     ]);

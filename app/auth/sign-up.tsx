@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Modal,
@@ -15,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { COLORS } from '@/src/design/colors';
+import { signUp, SignUpPayload } from '@/src/api/auth';
 
 type Step = 'agreements' | 'email' | 'profile';
 
@@ -135,6 +137,7 @@ export default function SignUpScreen() {
   const [studentId, setStudentId] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const allAgreed = useMemo(
     () => AGREEMENT_ITEMS.every((item) => agreements[item.key]),
@@ -209,6 +212,67 @@ export default function SignUpScreen() {
     setResendCountdown(null);
   };
 
+  const submitSignUp = async (payload: SignUpPayload, displayName: string) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await signUp(payload);
+      Alert.alert('가입이 완료되었습니다', `${displayName}님, 환영합니다!`, [
+        {
+          text: '확인',
+          onPress: () => router.replace('/auth'),
+        },
+      ]);
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : '회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.';
+      Alert.alert('가입 실패', message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const confirmProfileSubmission = () => {
+    if (!isEmailVerified) {
+      Alert.alert('이메일 인증 필요', '학교 이메일 인증을 먼저 완료해주세요.');
+      return;
+    }
+
+    if (password !== passwordConfirm) {
+      Alert.alert('비밀번호를 확인해주세요', '비밀번호가 서로 일치하지 않습니다.');
+      return;
+    }
+
+    const trimmedDepartment = department.trim();
+    const trimmedStudentId = studentId.trim();
+    const trimmedName = name.trim();
+    const trimmedPhone = phone.trim();
+    const trimmedEmail = email.trim();
+
+    const payload: SignUpPayload = {
+      email: trimmedEmail,
+      password,
+      passwordConfirm,
+      studentId: trimmedStudentId,
+      studentName: trimmedName,
+      phoneNumber: trimmedPhone,
+    };
+
+    Alert.alert(
+      '가입 정보를 확인해주세요',
+      `해당 정보로 가입을 진행할까요?\n\n학과: ${trimmedDepartment}\n학번: ${trimmedStudentId}\n이름: ${trimmedName}`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '확인',
+          onPress: () => submitSignUp(payload, trimmedName),
+        },
+      ],
+    );
+  };
+
   const goNext = () => {
     if (step === 'agreements') {
       setStep('email');
@@ -220,33 +284,7 @@ export default function SignUpScreen() {
       return;
     }
 
-    if (password !== passwordConfirm) {
-      Alert.alert('비밀번호를 확인해주세요', '비밀번호가 서로 일치하지 않습니다.');
-      return;
-    }
-
-    Alert.alert(
-      '가입 정보를 확인해주세요',
-      `해당 정보로 가입을 진행할까요?\n\n학과: ${department.trim()}\n학번: ${studentId.trim()}\n이름: ${name.trim()}`,
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '확인',
-          onPress: () => {
-            Alert.alert(
-              '가입이 완료되었습니다',
-              `${name.trim()}님, 환영합니다!`,
-              [
-                {
-                  text: '확인',
-                  onPress: () => router.replace('/auth'),
-                },
-              ],
-            );
-          },
-        },
-      ],
-    );
+    confirmProfileSubmission();
   };
 
   const goPrev = () => {
@@ -272,8 +310,8 @@ export default function SignUpScreen() {
     if (step === 'email') {
       return isEmailVerified;
     }
-    return profileFilled;
-  }, [allAgreed, isEmailVerified, profileFilled, step]);
+    return profileFilled && !isSubmitting;
+  }, [allAgreed, isEmailVerified, profileFilled, step, isSubmitting]);
 
   const nextLabel = step === 'profile' ? '가입하기' : '다음';
 
@@ -331,7 +369,7 @@ export default function SignUpScreen() {
   const sendButtonLabel = isCodeSent ? '인증 번호 재발송' : '인증 번호 발송';
   const sendDisabled = step !== 'email' || isEmailVerified;
   const confirmDisabled = step !== 'email' || !code.trim() || isEmailVerified;
-  const backDisabled = step === 'email' && isEmailVerified;
+  const backDisabled = (step === 'email' && isEmailVerified) || isSubmitting;
 
   const activeAgreement = activeAgreementKey
     ? AGREEMENT_DETAILS[activeAgreementKey]
@@ -621,14 +659,18 @@ export default function SignUpScreen() {
                 pressed && isNextEnabled && { opacity: 0.92 },
               ]}
             >
-              <Text
-                style={[
-                  styles.primaryButtonText,
-                  !isNextEnabled && styles.primaryButtonTextDisabled,
-                ]}
-              >
-                {nextLabel}
-              </Text>
+              {step === 'profile' && isSubmitting ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text
+                  style={[
+                    styles.primaryButtonText,
+                    !isNextEnabled && styles.primaryButtonTextDisabled,
+                  ]}
+                >
+                  {nextLabel}
+                </Text>
+              )}
             </Pressable>
           </View>
         </ScrollView>

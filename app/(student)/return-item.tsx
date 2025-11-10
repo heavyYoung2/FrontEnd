@@ -181,7 +181,7 @@ export default function StudentReturnItemScreen() {
                   <Text style={styles.metaValue}>{selectedMeta.rentedAt}</Text>
                 </View>
                 <View style={styles.metaCol}>
-                  <Text style={styles.metaLabel}>반납 마감</Text>
+                  <Text style={styles.metaLabel}>반납 예정일</Text>
                   <Text style={styles.metaValue}>{selectedMeta.expectedReturnAt}</Text>
                 </View>
               </View>

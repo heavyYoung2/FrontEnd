@@ -4,18 +4,27 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import HoebiyoungLogo from '@/src/components/HoebiyoungLogo';
 import { COLORS } from '@/src/design/colors';
+import { useAuth } from '@/src/auth/AuthProvider';
 
 const SPLASH_DELAY_MS = 1600;
 
 export default function AppSplashScreen() {
   const router = useRouter();
+  const { role, loading } = useAuth();
 
   useEffect(() => {
+    if (loading) {
+      return;
+    }
+
+    const target = role ? '/(student)/(tabs)' : '/auth';
+
     const timer = setTimeout(() => {
-      router.replace('/auth');
+      router.replace(target);
     }, SPLASH_DELAY_MS);
+
     return () => clearTimeout(timer);
-  }, [router]);
+  }, [role, loading, router]);
 
   return (
     <View style={styles.container}>

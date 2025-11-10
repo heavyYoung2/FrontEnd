@@ -198,8 +198,8 @@ export default function StudentMyPageScreen() {
                         <Text style={styles.metaValue}>{item.rentedAt}</Text>
                       </View>
                       <View style={[styles.metaRow, { marginTop: 4 }]}>
-                        <Text style={styles.metaLabel}>반납 예정일</Text>
-                        <Text style={styles.metaValue}>{item.expectedReturnAt}</Text>
+                        <Text style={styles.metaLabel}>반납일</Text>
+                        <Text style={styles.metaValue}>{item.returnedAt ?? '-'}</Text>
                       </View>
 
                       <Pressable

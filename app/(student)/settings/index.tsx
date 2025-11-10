@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import CouncilHeader from '@/components/CouncilHeader';
+import { useAuth } from '@/src/auth/AuthProvider';
 import { COLORS } from '../../../src/design/colors';
 import { TYPO } from '../../../src/design/typography';
 
@@ -24,6 +25,7 @@ const MENU = [
 
 export default function StudentSettingsHome() {
   const router = useRouter();
+  const { logout } = useAuth();
 
   const handleAction = (action: (typeof MENU)[number]['action']) => {
     switch (action) {
@@ -33,9 +35,12 @@ export default function StudentSettingsHome() {
           {
             text: '로그아웃',
             style: 'destructive',
-            onPress: () => {
-              // TODO: signOut
-              router.replace('/auth');
+            onPress: async () => {
+              try {
+                await logout();
+              } finally {
+                router.replace('/auth');
+              }
             },
           },
         ]);
