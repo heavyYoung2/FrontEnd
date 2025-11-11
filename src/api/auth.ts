@@ -45,6 +45,7 @@ export type LoginResult = {
   email: string;
   role: string;
   status: string;
+  studentId?: string | null;
   accessToken: string;
   refreshToken: string;
   expiresIn: number;

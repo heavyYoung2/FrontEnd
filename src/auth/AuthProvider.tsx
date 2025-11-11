@@ -10,6 +10,7 @@ type AuthContextValue = {
   memberId: number | null;
   email: string | null;
   status: string | null;
+  studentId: string | null;
   loading: boolean;
   login: (payload: LoginPayload) => Promise<void>;
   logout: () => Promise<void>;
@@ -22,6 +23,7 @@ const STORAGE_KEYS = {
   EMAIL: 'EMAIL',
   MEMBER_ID: 'MEMBER_ID',
   STATUS: 'MEMBER_STATUS',
+  STUDENT_ID: 'STUDENT_ID',
 } as const;
 
 const SERVER_ROLE_TO_APP_ROLE: Record<string, Role> = {
@@ -57,18 +59,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [memberId, setMemberId] = useState<number | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [studentId, setStudentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
-        const [savedRole, storedAccessToken, storedEmail, storedMemberId, storedStatus] =
+        const [savedRole, storedAccessToken, storedEmail, storedMemberId, storedStatus, storedStudentId] =
           await Promise.all([
             SecureStore.getItemAsync(STORAGE_KEYS.ROLE),
             SecureStore.getItemAsync(STORAGE_KEYS.ACCESS),
             SecureStore.getItemAsync(STORAGE_KEYS.EMAIL),
             SecureStore.getItemAsync(STORAGE_KEYS.MEMBER_ID),
             SecureStore.getItemAsync(STORAGE_KEYS.STATUS),
+            SecureStore.getItemAsync(STORAGE_KEYS.STUDENT_ID),
           ]);
 
         if (storedAccessToken) {
@@ -81,6 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setEmail(storedEmail || null);
         setMemberId(toNumberOrNull(storedMemberId));
         setStatus(storedStatus || null);
+        setStudentId(storedStudentId || null);
       } catch (error) {
         console.warn('[AuthProvider] restore session failed', error);
       } finally {
@@ -100,6 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       SecureStore.setItemAsync(STORAGE_KEYS.EMAIL, response.email ?? ''),
       SecureStore.setItemAsync(STORAGE_KEYS.MEMBER_ID, String(response.memberId ?? '')),
       SecureStore.setItemAsync(STORAGE_KEYS.STATUS, response.status ?? ''),
+      SecureStore.setItemAsync(STORAGE_KEYS.STUDENT_ID, response.studentId ?? ''),
     ]);
 
     setAuthToken(response.accessToken);
@@ -107,6 +113,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setEmail(response.email ?? null);
     setMemberId(response.memberId ?? null);
     setStatus(response.status ?? null);
+    setStudentId(response.studentId ?? null);
   };
 
   const logout = async () => {
@@ -118,10 +125,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setEmail(null);
     setMemberId(null);
     setStatus(null);
+    setStudentId(null);
   };
 
   return (
-    <AuthCtx.Provider value={{ role, memberId, email, status, loading, login, logout }}>
+    <AuthCtx.Provider value={{ role, memberId, email, status, studentId, loading, login, logout }}>
       {children}
     </AuthCtx.Provider>
   );

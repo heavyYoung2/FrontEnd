@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@/src/auth/AuthProvider';
 
 const COLORS = {
   primary: '#2E46F0',
@@ -9,12 +10,13 @@ const COLORS = {
   border: '#E6E8EE',
   surface: '#FFFFFF',
 };
+const PLACEHOLDER_STUDENT_ID = 'C246120';
 
 type Props = {
   /** 헤더 맨 위 뱃지 텍스트 (예: 학생회). null이면 숨김 */
   badgeLabel?: string | null;
   /** 학번 (예: C246120) */
-  studentId: string;
+  studentId?: string | null;
   /** 헤더 제목 (예: 공지사항, 공지 작성, 달력 등) */
   title?: string;
   /** 뒤로가기 버튼 표시 여부 */
@@ -32,7 +34,7 @@ type Props = {
 };
 
 export default function CouncilHeader({
-  badgeLabel = '학생회',
+  badgeLabel,
   studentId,
   title,
   showBack = false,
@@ -43,6 +45,14 @@ export default function CouncilHeader({
   containerStyle,
 }: Props) {
   const router = useRouter();
+  const { role, studentId: authStudentId } = useAuth();
+
+  const resolvedBadgeLabel =
+    badgeLabel ?? (role === 'student' ? '학생' : '학생회');
+  const resolvedStudentId =
+    studentId && studentId !== PLACEHOLDER_STUDENT_ID
+      ? studentId
+      : authStudentId ?? PLACEHOLDER_STUDENT_ID;
 
   const handleBack = () => {
     if (onBackPress) {
@@ -63,12 +73,12 @@ export default function CouncilHeader({
     <View style={[styles.wrap, withBottomBorder && styles.border, containerStyle]}>
       {/* ① 학생회+학번 라인 (항상 최상단) */}
       <View style={styles.identity}>
-        {badgeLabel ? (
+        {resolvedBadgeLabel ? (
           <View style={styles.badge}>
-            <Text style={styles.badgeText}>{badgeLabel}</Text>
+            <Text style={styles.badgeText}>{resolvedBadgeLabel}</Text>
           </View>
         ) : null}
-        <Text style={styles.studentId}>{studentId}</Text>
+        <Text style={styles.studentId}>{resolvedStudentId}</Text>
       </View>
 
       {/* ② 페이지 헤더 라인 (제목/뒤로가기/우측액션) */}

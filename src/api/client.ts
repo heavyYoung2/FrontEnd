@@ -1,5 +1,5 @@
 // src/api/client.ts
-import axios from 'axios';
+import axios, { AxiosHeaders } from 'axios';
 import { Platform } from 'react-native';
 
 // 기기/에뮬레이터/시뮬레이터 구분
@@ -27,9 +27,9 @@ export function setAuthToken(token: string | null) {
 
 api.interceptors.request.use((config) => {
   if (accessToken) {
-    const headers = (config.headers ?? {}) as Record<string, string>;
-    if (!headers.Authorization) {
-      headers.Authorization = `Bearer ${accessToken}`;
+    const headers = AxiosHeaders.from(config.headers ?? {});
+    if (!headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${accessToken}`);
     }
     config.headers = headers;
   }
