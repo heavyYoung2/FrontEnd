@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { login as requestLogin, LoginPayload } from '@/src/api/auth';
+import { login as requestLogin, logout as requestLogout, LoginPayload } from '@/src/api/auth';
 import { setAuthToken } from '@/src/api/client';
 
 type Role = 'student' | 'council' | null;
@@ -94,6 +94,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     })();
   }, []);
 
+  const clearSession = async () => {
+    try {
+      await Promise.all(
+        Object.values(STORAGE_KEYS).map((key) => SecureStore.deleteItemAsync(key)),
+      );
+    } catch (error) {
+      console.warn('[AuthProvider] failed to clear stored session', error);
+    } finally {
+      setAuthToken(null);
+      setRole(null);
+      setEmail(null);
+      setMemberId(null);
+      setStatus(null);
+      setStudentId(null);
+    }
+  };
+
   const login = async (payload: LoginPayload) => {
     const response = await requestLogin(payload);
     const mappedRole = normalizeServerRole(response.role);
@@ -117,15 +134,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    await Promise.all(
-      Object.values(STORAGE_KEYS).map((key) => SecureStore.deleteItemAsync(key)),
-    );
-    setAuthToken(null);
-    setRole(null);
-    setEmail(null);
-    setMemberId(null);
-    setStatus(null);
-    setStudentId(null);
+    try {
+      await requestLogout();
+    } catch (error) {
+      console.warn('[AuthProvider] logout request failed', error);
+    } finally {
+      await clearSession();
+    }
   };
 
   return (

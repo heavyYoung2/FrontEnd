@@ -1,12 +1,7 @@
 // src/api/client.ts
 import axios, { AxiosHeaders } from 'axios';
-import { Platform } from 'react-native';
-
-// 기기/에뮬레이터/시뮬레이터 구분
-const BASE_URL =
-  Platform.OS === 'ios'
-    ? 'http://localhost:8080' // iOS 시뮬레이터 로컬 서버
-    : 'http://10.0.2.2:8080'; // Android 에뮬레이터 로컬 서버
+// 배포 서버 기본 URL
+const BASE_URL = 'http://13.209.220.192:8080';
 
 export const api = axios.create({
   baseURL: BASE_URL,

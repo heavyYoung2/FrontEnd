@@ -185,19 +185,19 @@ export default function RentalTab() {
   };
 
   const handleRent = (category: RentalCategory) => {
-    const target = category.assets.find((item) => item.status === 'available');
-    if (!target) {
+    const hasAvailable = category.assets.some((item) => item.status === 'available');
+    if (!hasAvailable) {
       Alert.alert('대여 처리', '대여 가능한 물품이 없습니다.');
       return;
     }
 
-    updateCategory(category.id, (cat) => ({
-      ...cat,
-      assets: cat.assets.map((item) =>
-        item.id === target.id ? { ...item, status: 'rented' as AssetStatus } : item
-      ),
-    }));
-    Alert.alert('대여 처리 완료', `${category.name} - ${target.label} 대여로 처리되었습니다.`);
+    router.push({
+      pathname: '/(council)/rental/scan',
+      params: {
+        categoryId: category.id,
+        categoryName: category.name,
+      },
+    });
   };
 
   const handleReturn = (category: RentalCategory) => {
@@ -207,13 +207,13 @@ export default function RentalTab() {
       return;
     }
 
-    updateCategory(category.id, (cat) => ({
-      ...cat,
-      assets: cat.assets.map((item) =>
-        item.id === target.id ? { ...item, status: 'available' as AssetStatus } : item
-      ),
-    }));
-    Alert.alert('반납 처리 완료', `${category.name} - ${target.label} 반납으로 처리되었습니다.`);
+    router.push({
+      pathname: '/(council)/rental/return',
+      params: {
+        categoryId: category.id,
+        categoryName: category.name,
+      },
+    });
   };
 
   const handleManageAssets = (category: RentalCategory) => {

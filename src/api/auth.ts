@@ -61,3 +61,11 @@ export async function login(payload: LoginPayload): Promise<LoginResult> {
 
   return data.result;
 }
+
+export async function logout(): Promise<void> {
+  const { data } = await api.post<ApiResponse<string>>('/api/auth/logout');
+
+  if (!data?.isSuccess) {
+    throw new Error(data?.message ?? '로그아웃에 실패했습니다.');
+  }
+}

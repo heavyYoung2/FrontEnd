@@ -1,0 +1,229 @@
+import { isAxiosError } from 'axios';
+import { api } from './client';
+
+type ApiResponse<T> = {
+  isSuccess: boolean;
+  result: T | null;
+  message?: string;
+  code?: string;
+  errorCode?: string;
+};
+
+type ApiErrorPayload = {
+  isSuccess?: boolean;
+  message?: string;
+  code?: string;
+  errorCode?: string;
+  status?: string;
+};
+
+const RENTAL_ERROR_CODES = [
+  'MEMBER_IS_BLACKLIST',
+  'MEMBER_NOT_PAID',
+  'MEMBER_HAS_OVERDUE_ITEM',
+  'MEMBER_ALREADY_RENTED_SAME_CATEGORY',
+  'ITEM_QUANTITY_NON_POSITIVE',
+  'ITEM_CATEGORY_NOT_FOUND',
+  'MEMBER_NOT_FOUND',
+  'ALREADY_RETURN',
+] as const;
+
+export type RentalScanErrorCode = (typeof RENTAL_ERROR_CODES)[number];
+
+const RENTAL_ERROR_CODE_SET = new Set<RentalScanErrorCode>(RENTAL_ERROR_CODES);
+
+const DEFAULT_ERROR_MESSAGE = '물품 대여를 진행하지 못했습니다.';
+
+const normalizeRentalErrorCode = (value: unknown): RentalScanErrorCode | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toUpperCase();
+  return RENTAL_ERROR_CODE_SET.has(normalized as RentalScanErrorCode)
+    ? (normalized as RentalScanErrorCode)
+    : undefined;
+};
+
+const toNullableString = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const toNullableNumber = (value: unknown): number | null => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const pickExpectedReturnAt = (record: Record<string, unknown>): string | null => {
+  if (!record) return null;
+  return (
+    toNullableString(
+      record.expectedReturnAt ??
+        record.rentalEndedAt ??
+        record.rentalEndAt ??
+        record.returnDueDate ??
+        record.returnDueDateAt,
+    ) ?? null
+  );
+};
+
+export type AdminRentalStatus = 'IN_PROGRESS' | 'OVERDUE' | 'RETURNED' | 'CANCELLED';
+
+export type AdminRentalHistory = {
+  rentalHistoryId: number | null;
+  itemName: string;
+  itemCategoryName: string;
+  renterName: string;
+  renterStudentId: string;
+  rentalStartedAt: string | null;
+  expectedReturnAt: string | null;
+  returnedAt: string | null;
+  rentalStatus: AdminRentalStatus;
+};
+
+const normalizeAdminRentalStatus = (value: unknown): AdminRentalStatus => {
+  if (typeof value !== 'string') return 'IN_PROGRESS';
+  const normalized = value.trim().toUpperCase();
+  switch (normalized) {
+    case 'OVERDUE':
+      return 'OVERDUE';
+    case 'RETURNED':
+    case 'COMPLETED':
+      return 'RETURNED';
+    case 'CANCELLED':
+    case 'CANCELED':
+      return 'CANCELLED';
+    case 'RENTING':
+    case 'IN_PROGRESS':
+    case 'BORROWED':
+    default:
+      return 'IN_PROGRESS';
+  }
+};
+
+const normalizeAdminRentalHistory = (input: unknown): AdminRentalHistory => {
+  if (!input || typeof input !== 'object') {
+    return {
+      rentalHistoryId: null,
+      itemName: '알 수 없는 물품',
+      itemCategoryName: '기타',
+      renterName: '알 수 없음',
+      renterStudentId: '-',
+      rentalStartedAt: null,
+      expectedReturnAt: null,
+      returnedAt: null,
+      rentalStatus: 'IN_PROGRESS',
+    };
+  }
+
+  const record = input as Record<string, unknown>;
+  return {
+    rentalHistoryId: toNullableNumber(record.rentalHistoryId),
+    itemName: toNullableString(record.itemName) ?? '알 수 없는 물품',
+    itemCategoryName:
+      toNullableString(record.itemCategoryName ?? record.categoryName ?? record.itemCategory)?.trim() ?? '기타',
+    renterName: toNullableString(record.memberName ?? record.renterName ?? record.studentName) ?? '알 수 없음',
+    renterStudentId:
+      toNullableString(
+        record.memberStudentId ?? record.studentId ?? record.studentCode ?? record.renterStudentId,
+      ) ?? '-',
+    rentalStartedAt: toNullableString(record.rentalStartedAt ?? record.rentalStartAt),
+    expectedReturnAt: pickExpectedReturnAt(record),
+    returnedAt: toNullableString(record.returnedAt),
+    rentalStatus: normalizeAdminRentalStatus(record.rentalStatus),
+  };
+};
+
+const normalizeAdminRentalHistoryList = (input: unknown): AdminRentalHistory[] => {
+  if (!input || typeof input !== 'object') {
+    return [];
+  }
+
+  const record = input as Record<string, unknown>;
+  const items = Array.isArray(record.items) ? record.items : [];
+  return items.map(normalizeAdminRentalHistory);
+};
+
+export const RENTAL_SCAN_ERROR_MESSAGES: Record<RentalScanErrorCode, string> = {
+  MEMBER_IS_BLACKLIST: '블랙리스트 대상자는 대여할 수 없어요.',
+  MEMBER_NOT_PAID: '학생회비 미납자는 대여할 수 없어요.',
+  MEMBER_HAS_OVERDUE_ITEM: '연체 중인 물품이 있어 대여할 수 없어요.',
+  MEMBER_ALREADY_RENTED_SAME_CATEGORY: '같은 종류의 물품을 이미 대여 중이에요.',
+  ITEM_QUANTITY_NON_POSITIVE: '대여 가능한 재고가 없습니다.',
+  ITEM_CATEGORY_NOT_FOUND: '물품 정보를 찾을 수 없어요.',
+  MEMBER_NOT_FOUND: '학생 정보를 찾을 수 없어요.',
+  ALREADY_RETURN: '이미 반납이 완료된 물품이에요.',
+};
+
+export class RentalQrScanError extends Error {
+  code?: RentalScanErrorCode;
+  status?: number;
+
+  constructor(message: string, options?: { code?: RentalScanErrorCode; status?: number }) {
+    super(message);
+    this.name = 'RentalQrScanError';
+    this.code = options?.code;
+    this.status = options?.status;
+  }
+}
+
+export async function rentItemByQrToken(qrToken: string): Promise<void> {
+  const trimmed = typeof qrToken === 'string' ? qrToken.trim() : '';
+  if (!trimmed) {
+    throw new RentalQrScanError('올바른 QR 코드가 아닙니다.');
+  }
+
+  try {
+    const { data } = await api.post<ApiResponse<null>>('/admin/rentals/qr', { qrToken: trimmed });
+    if (!data?.isSuccess) {
+      const code = normalizeRentalErrorCode((data as ApiErrorPayload)?.code ?? (data as ApiErrorPayload)?.errorCode);
+      throw new RentalQrScanError(data?.message ?? DEFAULT_ERROR_MESSAGE, { code });
+    }
+  } catch (error) {
+    if (isAxiosError(error)) {
+      const payload = error.response?.data as ApiErrorPayload | undefined;
+      const rawCode = payload?.code ?? payload?.errorCode ?? payload?.status;
+      const code = normalizeRentalErrorCode(rawCode);
+      const message = payload?.message ?? DEFAULT_ERROR_MESSAGE;
+      throw new RentalQrScanError(message, { code, status: error.response?.status });
+    }
+    if (error instanceof RentalQrScanError) {
+      throw error;
+    }
+    throw new RentalQrScanError(DEFAULT_ERROR_MESSAGE);
+  }
+}
+
+export async function returnItemByQrToken(qrToken: string): Promise<void> {
+  const trimmed = typeof qrToken === 'string' ? qrToken.trim() : '';
+  if (!trimmed) {
+    throw new RentalQrScanError('올바른 QR 코드가 아닙니다.');
+  }
+
+  try {
+    const { data } = await api.post<ApiResponse<null>>('/admin/rentals/return', { qrToken: trimmed });
+    if (!data?.isSuccess) {
+      const code = normalizeRentalErrorCode((data as ApiErrorPayload)?.code ?? (data as ApiErrorPayload)?.errorCode);
+      throw new RentalQrScanError(data?.message ?? DEFAULT_ERROR_MESSAGE, { code });
+    }
+  } catch (error) {
+    if (isAxiosError(error)) {
+      const payload = error.response?.data as ApiErrorPayload | undefined;
+      const rawCode = payload?.code ?? payload?.errorCode ?? payload?.status;
+      const code = normalizeRentalErrorCode(rawCode);
+      const message = payload?.message ?? DEFAULT_ERROR_MESSAGE;
+      throw new RentalQrScanError(message, { code, status: error.response?.status });
+    }
+    if (error instanceof RentalQrScanError) {
+      throw error;
+    }
+    throw new RentalQrScanError(DEFAULT_ERROR_MESSAGE);
+  }
+}
+
+export async function fetchAdminRentalHistories(): Promise<AdminRentalHistory[]> {
+  const { data } = await api.get<ApiResponse<unknown>>('/admin/rentals');
+  if (!data?.result) {
+    return [];
+  }
+  return normalizeAdminRentalHistoryList(data.result);
+}

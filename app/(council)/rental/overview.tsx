@@ -1,8 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,12 +13,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '@/src/design/colors';
 import { TYPO } from '@/src/design/typography';
 import DateTimePicker from '@react-native-community/datetimepicker';
-
-type RentalStatus = 'rented' | 'returned';
+import { AdminRentalHistory, AdminRentalStatus, fetchAdminRentalHistories } from '@/src/api/rentalAdmin';
 
 type RentalRecord = {
   id: string;
@@ -24,83 +26,87 @@ type RentalRecord = {
   itemName: string;
   renterName: string;
   renterId: string;
-  rentDate: string;   // yyyy-MM-dd
-  dueDate: string;    // yyyy-MM-dd
-  actualReturnDate?: string | null;
-  status: RentalStatus;
+  rentDate: string | null;
+  dueDate: string | null;
+  returnDate: string | null;
+  status: AdminRentalStatus;
 };
 
-const MOCK_RENTAL_HISTORY: RentalRecord[] = [
-  {
-    id: 'rent-1001',
-    category: '보조배터리',
-    itemName: '보조배터리 02',
-    renterName: '윤현일',
-    renterId: 'C123544',
-    rentDate: '2025-07-12',
-    dueDate: '2025-07-13',
-    actualReturnDate: null,
-    status: 'rented',
+const STATUS_ORDER: AdminRentalStatus[] = ['IN_PROGRESS', 'OVERDUE', 'RETURNED'];
+
+const STATUS_META: Record<
+  AdminRentalStatus,
+  { label: string; chipBg: string; chipColor: string; badgeBg: string; badgeColor: string }
+> = {
+  IN_PROGRESS: {
+    label: '대여중',
+    chipBg: '#EEF2FF',
+    chipColor: COLORS.primary,
+    badgeBg: '#EEF2FF',
+    badgeColor: COLORS.primary,
   },
-  {
-    id: 'rent-1002',
-    category: '보조배터리',
-    itemName: '보조배터리 05',
-    renterName: '박형진',
-    renterId: 'C123544',
-    rentDate: '2025-06-11',
-    dueDate: '2025-06-12',
-    actualReturnDate: '2025-06-12',
-    status: 'returned',
+  OVERDUE: {
+    label: '연체',
+    chipBg: 'rgba(239, 68, 68, 0.1)',
+    chipColor: COLORS.danger,
+    badgeBg: 'rgba(239, 68, 68, 0.14)',
+    badgeColor: COLORS.danger,
   },
-  {
-    id: 'rent-1003',
-    category: '충전기',
-    itemName: '충전기 01',
-    renterName: '안제웅',
-    renterId: 'C123544',
-    rentDate: '2025-06-08',
-    dueDate: '2025-06-09',
-    actualReturnDate: '2025-06-11',
-    status: 'returned',
+  RETURNED: {
+    label: '반납완료',
+    chipBg: '#E6F9F3',
+    chipColor: '#0F766E',
+    badgeBg: '#E6F9F3',
+    badgeColor: '#0F766E',
   },
-  {
-    id: 'rent-1004',
-    category: '장우산',
-    itemName: '장우산 03',
-    renterName: '이다슬',
-    renterId: 'C123544',
-    rentDate: '2025-05-12',
-    dueDate: '2025-05-13',
-    actualReturnDate: '2025-07-12',
-    status: 'returned',
+  CANCELLED: {
+    label: '취소됨',
+    chipBg: COLORS.surface,
+    chipColor: COLORS.textMuted,
+    badgeBg: COLORS.surface,
+    badgeColor: COLORS.textMuted,
   },
-  {
-    id: 'rent-1005',
-    category: '장우산',
-    itemName: '장우산 01',
-    renterName: '김보람',
-    renterId: 'C123677',
-    rentDate: '2025-07-01',
-    dueDate: '2025-07-02',
-    actualReturnDate: null,
-    status: 'rented',
-  },
-];
+};
 
 const STATUS_FILTERS = [
   { key: 'all', label: '전체' },
-  { key: 'rented', label: '대여중' },
-  { key: 'returned', label: '반납완료' },
+  ...STATUS_ORDER.map((key) => ({ key, label: STATUS_META[key].label })),
 ] as const;
 
-const CATEGORY_FILTERS = ['전체', '보조배터리', '충전기', '장우산'] as const;
-
 type StatusFilterKey = (typeof STATUS_FILTERS)[number]['key'];
-type CategoryFilterKey = (typeof CATEGORY_FILTERS)[number];
+
+type CategoryFilterKey = string;
+
+const DEFAULT_CATEGORY_FILTERS = ['전체', '보조배터리', '장우산', '노트북 충전기'];
+
+const mapHistoryToRecord = (history: AdminRentalHistory): RentalRecord => {
+  const identifier =
+    history.rentalHistoryId != null
+      ? String(history.rentalHistoryId)
+      : [
+          history.itemName,
+          history.renterStudentId,
+          history.rentalStartedAt ?? '',
+          Math.random().toString(36).slice(2, 8),
+        ].join('-');
+
+  const rawCategory = history.itemCategoryName?.trim() ?? '';
+  const normalizedCategory = rawCategory === '기타' ? '' : rawCategory;
+  return {
+    id: identifier,
+    category: normalizedCategory,
+    itemName: history.itemName,
+    renterName: history.renterName,
+    renterId: history.renterStudentId,
+    rentDate: history.rentalStartedAt,
+    dueDate: history.expectedReturnAt,
+    returnDate: history.returnedAt,
+    status: history.rentalStatus,
+  };
+};
 
 export default function RentalOverviewScreen() {
-  const [records, setRecords] = useState<RentalRecord[]>(MOCK_RENTAL_HISTORY);
+  const [records, setRecords] = useState<RentalRecord[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilterKey>('all');
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilterKey>('전체');
   const [searchTerm, setSearchTerm] = useState('');
@@ -108,25 +114,61 @@ export default function RentalOverviewScreen() {
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [tempDate, setTempDate] = useState(new Date());
   const [pendingRecord, setPendingRecord] = useState<RentalRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadRecords = useCallback(async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const histories = await fetchAdminRentalHistories();
+      setRecords(histories.map(mapHistoryToRecord));
+    } catch (err) {
+      console.warn('[council rental] failed to load histories', err);
+      const message = err instanceof Error ? err.message : '대여 내역을 불러오지 못했습니다.';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadRecords();
+    }, [loadRecords]),
+  );
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadRecords();
+    setRefreshing(false);
+  }, [loadRecords]);
+
+  const categoryOptions = useMemo(() => {
+    const dynamic = Array.from(
+      new Set(records.map((record) => record.category?.trim()).filter((cat): cat is string => Boolean(cat))),
+    ).filter((cat) => cat !== '기타');
+    dynamic.sort((a, b) => a.localeCompare(b, 'ko-KR'));
+    const extras = dynamic.filter((cat) => !DEFAULT_CATEGORY_FILTERS.includes(cat));
+    return [...DEFAULT_CATEGORY_FILTERS, ...extras];
+  }, [records]);
+
+  useEffect(() => {
+    if (categoryFilter === '전체') return;
+    if (!categoryOptions.includes(categoryFilter)) {
+      setCategoryFilter('전체');
+    }
+  }, [categoryFilter, categoryOptions]);
 
   const filteredRecords = useMemo(() => {
+    const keyword = searchTerm.trim().toLowerCase();
     return records.filter((record) => {
       if (statusFilter !== 'all' && record.status !== statusFilter) return false;
       if (categoryFilter !== '전체' && record.category !== categoryFilter) return false;
-      if (selectedDate) {
-        const rentDate = new Date(record.rentDate);
-        if (
-          rentDate.getFullYear() !== selectedDate.getFullYear() ||
-          rentDate.getMonth() !== selectedDate.getMonth()
-        ) {
-          return false;
-        }
-      }
-      if (searchTerm.trim()) {
-        const keyword = searchTerm.trim().toLowerCase();
-        const target = [record.itemName, record.renterName, record.renterId, record.category]
-          .join(' ')
-          .toLowerCase();
+      if (selectedDate && !matchesSelectedDate(record.rentDate, selectedDate)) return false;
+      if (keyword) {
+        const target = `${record.itemName} ${record.renterName} ${record.renterId} ${record.category}`.toLowerCase();
         if (!target.includes(keyword)) return false;
       }
       return true;
@@ -163,7 +205,13 @@ export default function RentalOverviewScreen() {
         )}
       />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />
+        }
+      >
         <View style={styles.filtersCard}>
           <View style={styles.searchRow}>
             <Ionicons name="search" size={18} color={COLORS.textMuted} />
@@ -183,7 +231,7 @@ export default function RentalOverviewScreen() {
           </View>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
-            {CATEGORY_FILTERS.map((category) => {
+            {categoryOptions.map((category) => {
               const active = categoryFilter === category;
               return (
                 <Pressable
@@ -218,7 +266,7 @@ export default function RentalOverviewScreen() {
 
           {selectedDate && (
             <View style={styles.dateFilterBadge}>
-              <Text style={styles.dateFilterText}>{formatYearMonth(selectedDate)} 기준</Text>
+              <Text style={styles.dateFilterText}>{formatSelectedDate(selectedDate)} 기준</Text>
               <Pressable onPress={clearDateFilter} hitSlop={10}>
                 <Ionicons name="close" size={16} color={COLORS.text} />
               </Pressable>
@@ -226,20 +274,40 @@ export default function RentalOverviewScreen() {
           )}
         </View>
 
-        <View style={styles.listSection}>
-          {filteredRecords.map((record) => (
-            <RentalRecordCard
-              key={record.id}
-              record={record}
-              onManualReturn={handleManualReturn}
-            />
-          ))}
+        {error && (
+          <View style={styles.errorBox}>
+            <Ionicons name="warning-outline" size={18} color={COLORS.danger} />
+            <Text style={styles.errorText}>{error}</Text>
+            <Pressable onPress={loadRecords} style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.85 }]}>
+              <Ionicons name="refresh" size={14} color={COLORS.primary} style={{ marginRight: 4 }} />
+              <Text style={styles.retryBtnText}>다시 불러오기</Text>
+            </Pressable>
+          </View>
+        )}
 
-          {filteredRecords.length === 0 && (
-            <View style={styles.emptyBox}>
-              <Ionicons name="file-tray" size={28} color={COLORS.textMuted} style={{ marginBottom: 12 }} />
-              <Text style={styles.emptyText}>조건에 해당하는 대여 기록이 없습니다.</Text>
+        <View style={styles.listSection}>
+          {loading && records.length === 0 ? (
+            <View style={styles.loadingBox}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+              <Text style={styles.loadingText}>대여 내역을 불러오는 중입니다.</Text>
             </View>
+          ) : (
+            <>
+              {filteredRecords.map((record) => (
+                <RentalRecordCard
+                  key={record.id}
+                  record={record}
+                  onManualReturn={handleManualReturn}
+                />
+              ))}
+
+              {!loading && filteredRecords.length === 0 && (
+                <View style={styles.emptyBox}>
+                  <Ionicons name="file-tray" size={28} color={COLORS.textMuted} style={{ marginBottom: 12 }} />
+                  <Text style={styles.emptyText}>조건에 해당하는 대여 기록이 없습니다.</Text>
+                </View>
+              )}
+            </>
           )}
         </View>
       </ScrollView>
@@ -273,11 +341,17 @@ type RentalRecordCardProps = {
 };
 
 function RentalRecordCard({ record, onManualReturn }: RentalRecordCardProps) {
-  const isReturned = record.status === 'returned';
+  const isReturned = record.status === 'RETURNED';
+  const isDisabled = isReturned || record.status === 'CANCELLED';
+  const buttonLabel = isReturned
+    ? '반납 완료'
+    : record.status === 'OVERDUE'
+      ? '연체 처리'
+      : '수동 반납 처리';
   return (
     <View style={styles.card}>
       <View style={styles.cardHeaderRow}>
-        <Text style={styles.cardTitle}>{record.category}</Text>
+        {record.category && <Text style={styles.cardTitle}>{record.category}</Text>}
         <StatusBadge status={record.status} />
       </View>
 
@@ -296,45 +370,45 @@ function RentalRecordCard({ record, onManualReturn }: RentalRecordCardProps) {
       <View style={styles.datesGrid}>
         <DateLine label="대여 일자" value={record.rentDate} />
         <DateLine label="반납 예정" value={record.dueDate} />
-        <DateLine label="실제 반납" value={record.actualReturnDate ?? '-'} />
+        <DateLine label="실제 반납" value={record.returnDate} />
       </View>
 
       <Pressable
-        onPress={() => (isReturned ? undefined : onManualReturn(record))}
+        onPress={() => (isDisabled ? undefined : onManualReturn(record))}
         style={({ pressed }) => [
           styles.cardButton,
-          isReturned ? styles.cardButtonDisabled : styles.cardButtonActive,
-          pressed && !isReturned && { opacity: 0.92 },
+          isDisabled ? styles.cardButtonDisabled : styles.cardButtonActive,
+          pressed && !isDisabled && { opacity: 0.92 },
         ]}
       >
-        <Text style={[styles.cardButtonText, isReturned ? styles.cardButtonTextDisabled : styles.cardButtonTextActive]}>
-          {isReturned ? '반납 완료' : '수동 반납 처리'}
+        <Text
+          style={[styles.cardButtonText, isDisabled ? styles.cardButtonTextDisabled : styles.cardButtonTextActive]}
+        >
+          {buttonLabel}
         </Text>
       </Pressable>
     </View>
   );
 }
 
-type StatusBadgeProps = { status: RentalStatus };
+type StatusBadgeProps = { status: AdminRentalStatus };
 
 function StatusBadge({ status }: StatusBadgeProps) {
-  const isReturned = status === 'returned';
+  const meta = STATUS_META[status] ?? STATUS_META.IN_PROGRESS;
   return (
-    <View style={[styles.statusBadge, isReturned ? styles.statusBadgeReturned : styles.statusBadgeRented]}>
-      <Text style={[styles.statusBadgeText, isReturned ? styles.statusBadgeTextReturned : styles.statusBadgeTextRented]}>
-        {isReturned ? '반납 완료' : '대여중'}
-      </Text>
+    <View style={[styles.statusBadge, { backgroundColor: meta.badgeBg }]}>
+      <Text style={[styles.statusBadgeText, { color: meta.badgeColor }]}>{meta.label}</Text>
     </View>
   );
 }
 
-type DateLineProps = { label: string; value: string };
+type DateLineProps = { label: string; value: string | null };
 
 function DateLine({ label, value }: DateLineProps) {
   return (
     <View style={styles.dateLine}>
       <Text style={styles.dateLabel}>{label}</Text>
-      <Text style={styles.dateValue}>{value}</Text>
+      <Text style={styles.dateValue}>{formatDateValue(value)}</Text>
     </View>
   );
 }
@@ -422,13 +496,38 @@ function ConfirmReturnModal({ visible, record, onConfirm, onCancel }: ConfirmRet
   );
 }
 
-function formatYearMonth(date: Date) {
-  return `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
+function parseDateValue(value: string | null): Date | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatDateValue(value: string | null) {
+  const date = parseDateValue(value);
+  if (!date) return '-';
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}.${month}.${day}`;
+}
+
+function matchesSelectedDate(value: string | null, selected: Date) {
+  const date = parseDateValue(value);
+  if (!date) return false;
+  return (
+    date.getFullYear() === selected.getFullYear() &&
+    date.getMonth() === selected.getMonth() &&
+    date.getDate() === selected.getDate()
+  );
+}
+
+function formatSelectedDate(date: Date) {
+  return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.page },
-  scrollContent: { paddingHorizontal: 16, paddingBottom: 32, paddingTop: 16, gap: 16 },
+  scrollContent: { paddingHorizontal: 16, paddingBottom: 140, paddingTop: 16, gap: 16 },
   filtersCard: {
     borderRadius: 18,
     backgroundColor: '#FFFFFF',
@@ -524,6 +623,47 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingBottom: 12,
   },
+  errorBox: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  errorText: {
+    flex: 1,
+    fontFamily: 'Pretendard-Medium',
+    color: COLORS.danger,
+  },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: COLORS.blue100,
+  },
+  retryBtnText: {
+    fontFamily: 'Pretendard-SemiBold',
+    color: COLORS.primary,
+    fontSize: 12,
+  },
+  loadingBox: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingVertical: 32,
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFFFFF',
+  },
+  loadingText: {
+    fontFamily: 'Pretendard-Medium',
+    color: COLORS.textMuted,
+  },
   card: {
     borderRadius: 18,
     backgroundColor: '#FFFFFF',
@@ -602,21 +742,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 4,
   },
-  statusBadgeRented: {
-    backgroundColor: '#EEF2FF',
-  },
-  statusBadgeReturned: {
-    backgroundColor: '#E6F9F3',
-  },
   statusBadgeText: {
     fontFamily: 'Pretendard-SemiBold',
     fontSize: 12,
-  },
-  statusBadgeTextRented: {
-    color: COLORS.primary,
-  },
-  statusBadgeTextReturned: {
-    color: '#0F766E',
   },
   emptyBox: {
     borderRadius: 16,

@@ -6,7 +6,7 @@ export default function RentalStackLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="overview" />
       <Stack.Screen name="add" />
+      <Stack.Screen name="scan" />
     </Stack>
   );
 }
-
