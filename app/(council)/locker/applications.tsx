@@ -1,14 +1,16 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Modal,
+  Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +19,11 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { format } from 'date-fns';
 import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '@/src/design/colors';
+import {
+  createLockerApplication,
+  fetchLockerApplications,
+  LockerApplicationInfoApi,
+} from '@/src/api/locker';
 
 type LockerApplicant = {
   id: string;
@@ -31,55 +38,81 @@ type ApplicationSchedule = {
   endAt: string;
   semester: string;
   method: '정기' | '추가';
+  applicationType: LockerApplicationInfoApi['applicationType'];
   isOpen: boolean;
+  canAssign: boolean;
   notes?: string;
   applicants: LockerApplicant[];
 };
 
-const MOCK_APPLICANTS: LockerApplicant[] = Array.from({ length: 6 }).map((_, idx) => ({
-  id: `app-${idx + 1}`,
-  memberId: `C0${11130 + idx}`,
-  name: ['윤현일', '김지우', '박서연', '최민준', '이도현', '정하늘'][idx % 6],
-  appliedAt: `2025-08-04T21:0${idx}:31.512`,
-}));
-
-const INITIAL_SCHEDULES: ApplicationSchedule[] = [
-  {
-    id: 'schedule-2025-regular',
-    startAt: '2025-08-04T18:00:00',
-    endAt: '2025-08-07T18:00:00',
-    semester: '2025-1',
+const APPLICATION_TYPE_META: Record<
+  string,
+  { method: '정기' | '추가'; note?: string }
+> = {
+  LOCKER_MAIN: {
     method: '정기',
-    isOpen: true,
-    notes: '정기 배정 – 신청 인원은 자동으로 추첨됩니다.',
-    applicants: MOCK_APPLICANTS,
+    note: '정기 배정 – 신청 인원은 자동으로 추첨됩니다.',
   },
-  {
-    id: 'schedule-2024-extra',
-    startAt: '2024-09-04T18:00:00',
-    endAt: '2024-09-07T18:00:00',
-    semester: '2024-2',
+  LOCKER_ADDITIONAL: {
     method: '추가',
-    isOpen: false,
-    notes: '추가 배정 – 정기 미배정자를 우선으로 합니다.',
-    applicants: MOCK_APPLICANTS.slice(0, 3),
+    note: '추가 배정 – 정기 미배정자를 우선으로 합니다.',
   },
-  {
-    id: 'schedule-2024-regular',
-    startAt: '2024-02-26T09:00:00',
-    endAt: '2024-03-01T18:00:00',
-    semester: '2024-1',
-    method: '정기',
-    isOpen: false,
+};
+
+const FALLBACK_APPLICATION_META = { method: '정기' as const };
+
+function toApplicationSchedule(item: LockerApplicationInfoApi): ApplicationSchedule {
+  const meta = APPLICATION_TYPE_META[item.applicationType] ?? FALLBACK_APPLICATION_META;
+  return {
+    id: String(item.applicationId ?? item.semester ?? Date.now()),
+    startAt: item.applicationStartAt,
+    endAt: item.applicationEndAt,
+    semester: item.semester,
+    method: meta.method,
+    applicationType: item.applicationType,
+    isOpen: item.canApply,
+    canAssign: item.canAssign,
+    notes: meta.note,
     applicants: [],
-  },
-];
+  };
+}
 
 export default function LockerApplicationsScreen() {
   const router = useRouter();
-  const [schedules, setSchedules] = useState<ApplicationSchedule[]>(INITIAL_SCHEDULES);
+  const [schedules, setSchedules] = useState<ApplicationSchedule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [createVisible, setCreateVisible] = useState(false);
   const [detailSchedule, setDetailSchedule] = useState<ApplicationSchedule | null>(null);
+
+  const loadSchedules = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setLoading(true);
+    try {
+      setError(null);
+      const list = await fetchLockerApplications();
+      setSchedules(list.map(toApplicationSchedule));
+    } catch (err: any) {
+      console.warn('[locker-applications] fetch fail', err);
+      setError(err?.response?.data?.message || err?.message || '사물함 신청 정보를 불러오지 못했습니다.');
+    } finally {
+      if (!options?.silent) setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSchedules();
+  }, [loadSchedules]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadSchedules({ silent: true });
+  }, [loadSchedules]);
+
+  const handleRetry = useCallback(() => {
+    loadSchedules();
+  }, [loadSchedules]);
 
   const sortedSchedules = useMemo(() => {
     return [...schedules].sort((a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime());
@@ -89,9 +122,27 @@ export default function LockerApplicationsScreen() {
     setDetailSchedule(schedule);
   }, []);
 
-  const handleCreateSubmit = useCallback((schedule: ApplicationSchedule) => {
-    setSchedules(prev => [schedule, ...prev]);
-  }, []);
+  const handleCreateSubmit = useCallback(
+    async (schedule: ApplicationSchedule) => {
+      try {
+        await createLockerApplication({
+          applicationStartAt: schedule.startAt,
+          applicationEndAt: schedule.endAt,
+          semester: schedule.semester,
+          applicationType: schedule.applicationType,
+        });
+        Alert.alert('완료', `${schedule.semester} 사물함 신청을 생성했습니다.`);
+        setCreateVisible(false);
+        await loadSchedules();
+      } catch (err: any) {
+        const message =
+          err?.response?.data?.message || err?.message || '사물함 신청 생성에 실패했습니다.';
+        Alert.alert('오류', message);
+        throw err;
+      }
+    },
+    [loadSchedules],
+  );
 
   const handleToggleStatus = useCallback((scheduleId: string) => {
     setSchedules(prev => prev.map((item) => (item.id === scheduleId ? { ...item, isOpen: !item.isOpen } : item)));
@@ -109,6 +160,14 @@ export default function LockerApplicationsScreen() {
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
+        refreshControl={(
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
+          />
+        )}
       >
         <Pressable
           onPress={() => setCreateVisible(true)}
@@ -123,7 +182,31 @@ export default function LockerApplicationsScreen() {
           <Text style={styles.sectionCaption}>관리가 필요한 일정을 선택해 상세 정보를 확인하고 제어하세요.</Text>
         </View>
 
-        {sortedSchedules.map((item) => (
+        {loading && (
+          <View style={styles.stateBlock}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+            <Text style={styles.stateText}>신청 일정을 불러오는 중입니다.</Text>
+          </View>
+        )}
+
+        {error && !loading && (
+          <Pressable
+            onPress={handleRetry}
+            style={({ pressed }) => [styles.stateBlock, pressed && { opacity: 0.85 }]}
+          >
+            <Text style={[styles.stateText, { color: COLORS.danger }]}>{error}</Text>
+            <Text style={styles.stateHelper}>다시 시도하려면 눌러주세요.</Text>
+          </Pressable>
+        )}
+
+        {!loading && !error && !sortedSchedules.length && (
+          <View style={styles.stateBlock}>
+            <Text style={styles.stateText}>등록된 사물함 신청 일정이 없습니다.</Text>
+            <Text style={styles.stateHelper}>새로운 일정을 생성하거나, 아래로 당겨 새로고침하세요.</Text>
+          </View>
+        )}
+
+        {!loading && !error && sortedSchedules.map((item) => (
           <View key={item.id} style={styles.scheduleCard}>
             <View style={styles.scheduleHeader}>
               <View style={{ gap: 4 }}>
@@ -141,12 +224,12 @@ export default function LockerApplicationsScreen() {
 
             <View style={styles.scheduleMetaRow}>
               <MetaItem label="신청 방식" value={item.method} />
-              <MetaItem label="신청자" value={`${item.applicants.length}명`} />
+              <MetaItem label="배정 상태" value={item.canAssign ? '배정 가능' : '배정 마감'} />
             </View>
 
             <View style={styles.scheduleActions}>
               <Pressable
-                onPress={() => router.push({ pathname: '/(council)/locker/history', params: { schedule: item.id } })}
+                onPress={() => router.push({ pathname: '/(council)/locker/history', params: { schedule: item.semester } })}
                 style={({ pressed }) => [styles.outlineBtn, pressed && { opacity: 0.85 }]}
               >
                 <Text style={styles.outlineBtnText}>배정 내역</Text>
@@ -165,10 +248,7 @@ export default function LockerApplicationsScreen() {
       <CreateScheduleModal
         visible={createVisible}
         onClose={() => setCreateVisible(false)}
-        onSubmit={(schedule) => {
-          handleCreateSubmit(schedule);
-          setCreateVisible(false);
-        }}
+        onSubmit={handleCreateSubmit}
       />
 
       <ScheduleDetailModal
@@ -192,6 +272,10 @@ function formatDateTime(value: string | Date) {
   return format(date, 'yyyy-MM-dd HH:mm');
 }
 
+function formatLocalDatePayload(date: Date) {
+  return format(date, "yyyy-MM-dd'T'HH:mm:ss");
+}
+
 function MetaItem({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.metaItem}>
@@ -208,7 +292,7 @@ function CreateScheduleModal({
 }: {
   visible: boolean;
   onClose: () => void;
-  onSubmit: (schedule: ApplicationSchedule) => void;
+  onSubmit: (schedule: ApplicationSchedule) => Promise<void>;
 }) {
   const [semester, setSemester] = useState('');
   const [method, setMethod] = useState<'정기' | '추가'>('정기');
@@ -216,23 +300,35 @@ function CreateScheduleModal({
   const [endAt, setEndAt] = useState<Date>(new Date(Date.now() + 1000 * 60 * 60 * 24));
   const [notes, setNotes] = useState('');
   const [isOpen, setIsOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!semester.trim()) {
       Alert.alert('입력 필요', '학기를 입력해주세요.');
       return;
     }
 
-    onSubmit({
+    const payload: ApplicationSchedule = {
       id: `schedule-${semester}-${method}-${Date.now()}`,
       semester,
       method,
-      startAt: startAt.toISOString(),
-      endAt: endAt.toISOString(),
+      applicationType: method === '추가' ? 'LOCKER_ADDITIONAL' : 'LOCKER_MAIN',
+      startAt: formatLocalDatePayload(startAt),
+      endAt: formatLocalDatePayload(endAt),
       isOpen,
+      canAssign: true,
       notes: notes.trim() || undefined,
       applicants: [],
-    });
+    };
+
+    try {
+      setSubmitting(true);
+      await onSubmit(payload);
+    } catch {
+      // 부모에서 오류 메시지를 안내하므로 여기서는 상태만 복구
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (!visible) return null;
@@ -325,15 +421,21 @@ function CreateScheduleModal({
           <View style={styles.modalActions}>
             <Pressable
               onPress={onClose}
-              style={({ pressed }) => [styles.modalCancel, pressed && { opacity: 0.8 }]}
+              disabled={submitting}
+              style={({ pressed }) => [styles.modalCancel, pressed && !submitting && { opacity: 0.8 }]}
             >
               <Text style={styles.modalCancelText}>취소</Text>
             </Pressable>
             <Pressable
               onPress={handleConfirm}
-              style={({ pressed }) => [styles.modalConfirm, pressed && { opacity: 0.9 }]}
+              disabled={submitting}
+              style={({ pressed }) => [
+                styles.modalConfirm,
+                pressed && !submitting && { opacity: 0.9 },
+                submitting && { opacity: 0.7 },
+              ]}
             >
-              <Text style={styles.modalConfirmText}>생성</Text>
+              <Text style={styles.modalConfirmText}>{submitting ? '생성 중...' : '생성'}</Text>
             </Pressable>
           </View>
         </View>
@@ -394,6 +496,8 @@ function ScheduleDetailModal({
 }) {
   if (!schedule) return null;
 
+  const assignDisabled = !schedule.canAssign;
+
   return (
     <Modal
       animationType="slide"
@@ -415,6 +519,18 @@ function ScheduleDetailModal({
             <MetaItem label="신청 상태" value={schedule.isOpen ? '신청 가능' : '신청 마감'} />
           </View>
 
+          <View style={styles.detailNotes}>
+            <Text style={styles.detailNotesLabel}>신청 기간</Text>
+            <Text style={styles.detailNotesValue}>
+              {formatDateTime(schedule.startAt)} ~ {formatDateTime(schedule.endAt)}
+            </Text>
+          </View>
+
+          <View style={styles.detailNotes}>
+            <Text style={styles.detailNotesLabel}>배정 상태</Text>
+            <Text style={styles.detailNotesValue}>{schedule.canAssign ? '배정 가능' : '배정 마감'}</Text>
+          </View>
+
           {!!schedule.notes && (
             <View style={styles.detailNotes}>
               <Text style={styles.detailNotesLabel}>알림</Text>
@@ -432,10 +548,17 @@ function ScheduleDetailModal({
           </Pressable>
 
           <Pressable
+            disabled={assignDisabled}
             onPress={() => onAssignAll(schedule)}
-            style={({ pressed }) => [styles.outlineBtn, pressed && { opacity: 0.85 }]}
+            style={({ pressed }) => [
+              styles.outlineBtn,
+              assignDisabled && styles.disabledBtn,
+              pressed && !assignDisabled && { opacity: 0.85 },
+            ]}
           >
-            <Text style={styles.outlineBtnText}>전체 배정 실행</Text>
+            <Text style={[styles.outlineBtnText, assignDisabled && styles.disabledBtnText]}>
+              전체 배정 실행
+            </Text>
           </Pressable>
 
           <View style={styles.applicantsSection}>
@@ -507,6 +630,27 @@ const styles = StyleSheet.create({
     fontFamily: 'Pretendard-Medium',
     fontSize: 13,
     color: '#6B7280',
+  },
+  stateBlock: {
+    padding: 20,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stateText: {
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 14,
+    color: '#4B5563',
+    textAlign: 'center',
+  },
+  stateHelper: {
+    fontFamily: 'Pretendard-Regular',
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
   },
   scheduleCard: {
     backgroundColor: '#FFFFFF',
@@ -607,6 +751,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Pretendard-SemiBold',
     fontSize: 14,
     color: COLORS.primary,
+  },
+  disabledBtn: {
+    borderColor: '#D1D5DB',
+    backgroundColor: '#F3F4F6',
+  },
+  disabledBtnText: {
+    color: '#9CA3AF',
   },
   detailNotes: {
     gap: 4,

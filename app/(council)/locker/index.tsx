@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -87,6 +88,7 @@ export default function LockerTab() {
   );
   const [selectedSection, setSelectedSection] = useState<SectionId>('A');
   const [modalVisible, setModalVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const summaries = useMemo(() => {
     return SECTION_LIST.map((section) => {
@@ -108,7 +110,7 @@ export default function LockerTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadSection = async (section: SectionId) => {
+  const loadSection = useCallback(async (section: SectionId) => {
     setSectionStates((prev) => ({
       ...prev,
       [section]: { ...prev[section], status: 'loading', error: undefined },
@@ -133,7 +135,20 @@ export default function LockerTab() {
       }));
       Alert.alert('오류', error?.response?.data?.message || error?.message || '사물함 조회 실패');
     }
-  };
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all(
+        SECTION_LIST.map(async (section) => {
+          await loadSection(section);
+        }),
+      );
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadSection]);
 
   const handleOpenSection = (section: SectionId) => {
     setSelectedSection(section);
@@ -183,7 +198,18 @@ export default function LockerTab() {
         title="사물함 관리하기"
       />
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+        refreshControl={(
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
+          />
+        )}
+      >
         <View style={styles.shortcuts}>
           <Pressable
             onPress={() => router.push('/(council)/locker/applications')}

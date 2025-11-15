@@ -66,3 +66,35 @@ export async function fetchMyLocker() {
   }
   return data.result;
 }
+
+export type LockerApplicationInfoApi = {
+  applicationId: number;
+  applicationStartAt: string;
+  applicationEndAt: string;
+  semester: string;
+  applicationType: 'LOCKER_MAIN' | 'LOCKER_ADDITIONAL' | string;
+  canApply: boolean;
+  canAssign: boolean;
+};
+
+export async function fetchLockerApplications() {
+  const { data } = await api.get<ApiResponse<LockerApplicationInfoApi[]>>('/admin/lockers/applications');
+  if (!data?.result) {
+    throw new Error('Invalid server response');
+  }
+  return data.result;
+}
+
+export type CreateLockerApplicationPayload = {
+  applicationStartAt: string;
+  applicationEndAt: string;
+  semester: string;
+  applicationType: LockerApplicationInfoApi['applicationType'];
+};
+
+export async function createLockerApplication(payload: CreateLockerApplicationPayload) {
+  const { data } = await api.post<ApiResponse<null>>('/admin/lockers/applications', payload);
+  if (data?.isSuccess === false) {
+    throw new Error('Locker application creation failed');
+  }
+}
