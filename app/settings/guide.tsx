@@ -62,7 +62,7 @@ const TESTING = [
 
 export function GuideScreenTemplate({ badgeLabel }: { badgeLabel: string }) {
   return (
-    <SafeAreaView style={styles.safe} edges={['top'ㅌ₩, 'left', 'right']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <CouncilHeader badgeLabel={badgeLabel} studentId="C246120" title="회비영 안내" showBack />
 
       <ScrollView contentContainerStyle={styles.container}>

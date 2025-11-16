@@ -3,12 +3,14 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -16,6 +18,9 @@ import { useRouter } from 'expo-router';
 import HoebiyoungLogo from '@/src/components/HoebiyoungLogo';
 import { COLORS } from '@/src/design/colors';
 import { useAuth } from '@/src/auth/AuthProvider';
+
+const TEST_EMAIL = 'test@g.hongik.ac.kr';
+const TEST_PASSWORD = '12345678';
 
 export default function AuthIndexScreen() {
   const router = useRouter();
@@ -31,8 +36,20 @@ export default function AuthIndexScreen() {
     router.push('/auth/sign-up');
   };
 
-  const handleBypass = () => {
-    router.replace('/(student)/(tabs)');
+  const handleBypass = async () => {
+    if (submitting) return;
+    try {
+      setSubmitting(true);
+      setEmail(TEST_EMAIL);
+      setPassword(TEST_PASSWORD);
+      await login({ email: TEST_EMAIL, password: TEST_PASSWORD });
+      router.replace('/(student)/(tabs)');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '자동 로그인에 실패했습니다.';
+      Alert.alert('자동 로그인 실패', message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   useEffect(() => {
@@ -63,89 +80,91 @@ export default function AuthIndexScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <StatusBar style="dark" backgroundColor={COLORS.bg} />
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.select({ ios: 'padding', android: undefined })}
-      >
-        <View style={styles.logoBlock}>
-          <HoebiyoungLogo />
-        </View>
-
-        <View style={styles.form}>
-          <View style={styles.fieldBlock}>
-            <Text style={styles.label}>이메일</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="이메일을 입력해주세요."
-              placeholderTextColor={COLORS.textMuted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="email-address"
-              value={email}
-              onChangeText={setEmail}
-            />
-          </View>
-
-          <View style={styles.fieldBlock}>
-            <Text style={styles.label}>비밀번호</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="비밀번호를 입력해주세요."
-              placeholderTextColor={COLORS.textMuted}
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-            />
-          </View>
-
-          <View style={styles.actionsRow}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.primaryButton,
-                pressed && { opacity: 0.9 },
-                submitting && styles.disabledButton,
-              ]}
-              onPress={handleLogin}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator color={COLORS.bg} />
-              ) : (
-                <Text style={styles.primaryButtonText}>로그인</Text>
-              )}
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [
-                styles.secondaryButton,
-                pressed && { opacity: 0.9 },
-              ]}
-              onPress={handleSignUp}
-            >
-              <Text style={styles.secondaryButtonText}>회원가입</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.helperLinks}>
-            <Pressable onPress={showWipAlert} hitSlop={8}>
-              <Text style={styles.helperLinkText}>아이디 찾기</Text>
-            </Pressable>
-            <View style={styles.helperDivider} />
-            <Pressable onPress={showWipAlert} hitSlop={8}>
-              <Text style={styles.helperLinkText}>비밀번호 찾기</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.bypassButton,
-            pressed && { opacity: 0.75 },
-          ]}
-          onPress={handleBypass}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <KeyboardAvoidingView
+          style={styles.container}
+          behavior={Platform.select({ ios: 'padding', android: undefined })}
         >
-          <Text style={styles.bypassText}>로그인 없이 이용하기</Text>
-        </Pressable>
-      </KeyboardAvoidingView>
+          <View style={styles.logoBlock}>
+            <HoebiyoungLogo />
+          </View>
+
+          <View style={styles.form}>
+            <View style={styles.fieldBlock}>
+              <Text style={styles.label}>이메일</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="이메일을 입력해주세요."
+                placeholderTextColor={COLORS.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+              />
+            </View>
+
+            <View style={styles.fieldBlock}>
+              <Text style={styles.label}>비밀번호</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="비밀번호를 입력해주세요."
+                placeholderTextColor={COLORS.textMuted}
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+              />
+            </View>
+
+            <View style={styles.actionsRow}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  pressed && { opacity: 0.9 },
+                  submitting && styles.disabledButton,
+                ]}
+                onPress={handleLogin}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator color={COLORS.bg} />
+                ) : (
+                  <Text style={styles.primaryButtonText}>로그인</Text>
+                )}
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  pressed && { opacity: 0.9 },
+                ]}
+                onPress={handleSignUp}
+              >
+                <Text style={styles.secondaryButtonText}>회원가입</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.helperLinks}>
+              <Pressable onPress={showWipAlert} hitSlop={8}>
+                <Text style={styles.helperLinkText}>아이디 찾기</Text>
+              </Pressable>
+              <View style={styles.helperDivider} />
+              <Pressable onPress={showWipAlert} hitSlop={8}>
+                <Text style={styles.helperLinkText}>비밀번호 찾기</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.bypassButton,
+              pressed && { opacity: 0.75 },
+            ]}
+            onPress={handleBypass}
+          >
+            <Text style={styles.bypassText}>로그인 없이 이용하기</Text>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </TouchableWithoutFeedback>
     </SafeAreaView>
   );
 }

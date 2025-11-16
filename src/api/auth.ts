@@ -20,6 +20,24 @@ type SignUpResult = {
   memberId?: number | string | null;
 };
 
+type SendEmailCodeRequest = {
+  email: string;
+};
+
+type SendEmailCodeResult = {
+  code: string;
+};
+
+type VerifyEmailCodeRequest = {
+  email: string;
+  code: string;
+};
+
+type VerifyEmailCodeResult = {
+  email: string;
+  message: string;
+};
+
 export async function signUp(payload: SignUpPayload): Promise<number> {
   const { data } = await api.post<ApiResponse<SignUpResult>>('/api/auth/sign-in', payload);
 
@@ -68,4 +86,31 @@ export async function logout(): Promise<void> {
   if (!data?.isSuccess) {
     throw new Error(data?.message ?? '로그아웃에 실패했습니다.');
   }
+}
+
+export async function requestEmailCode(
+  payload: SendEmailCodeRequest,
+): Promise<SendEmailCodeResult> {
+  const { data } = await api.post<ApiResponse<SendEmailCodeResult>>('/api/auth/send-code', payload);
+
+  if (!data?.isSuccess || !data.result) {
+    throw new Error(data?.message ?? '이메일 인증 번호 전송에 실패했습니다.');
+  }
+
+  return data.result;
+}
+
+export async function verifyEmailCode(
+  payload: VerifyEmailCodeRequest,
+): Promise<VerifyEmailCodeResult> {
+  const { data } = await api.post<ApiResponse<VerifyEmailCodeResult>>(
+    '/api/auth/verify-code',
+    payload,
+  );
+
+  if (!data?.isSuccess || !data.result) {
+    throw new Error(data?.message ?? '이메일 인증에 실패했습니다.');
+  }
+
+  return data.result;
 }

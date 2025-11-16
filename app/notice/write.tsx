@@ -3,11 +3,13 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
   Alert,
+  Keyboard,
   Modal,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -90,67 +92,69 @@ export default function NoticeWriteScreen() {
   };  
  
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <CouncilHeader studentId="C246120" title="공지 작성" showBack />
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+        <CouncilHeader studentId="C246120" title="공지 작성" showBack />
 
-      {/* (3) 입력 카드 */}
-      <View style={styles.card}>
-        <Text style={styles.label}>제목</Text>
-        <TextInput
-          style={styles.input}
-          value={title}
-          onChangeText={setTitle}
-          placeholder="제목을 입력하세요"
+        {/* (3) 입력 카드 */}
+        <View style={styles.card}>
+          <Text style={styles.label}>제목</Text>
+          <TextInput
+            style={styles.input}
+            value={title}
+            onChangeText={setTitle}
+            placeholder="제목을 입력하세요"
+          />
+
+          <Text style={[styles.label, { marginTop: 12 }]}>내용</Text>
+          <TextInput
+            style={[styles.input, { height: 120, textAlignVertical: 'top' }]}
+            value={content}
+            onChangeText={setContent}
+            multiline
+            placeholder="내용을 입력하세요"
+          />
+
+          <Text style={[styles.label, { marginTop: 12 }]}>시작일</Text>
+          <Pressable
+            onPress={() => openPicker('start')}
+            style={({ pressed }) => [styles.dateInput, pressed && styles.dateInputPressed]}
+          >
+            <Text style={[styles.dateText, !startDate && styles.datePlaceholder]}>
+              {formatDisplayDate(startDate) ?? '날짜 선택'}
+            </Text>
+          </Pressable>
+
+          <Text style={[styles.label, { marginTop: 12 }]}>종료일</Text>
+          <Pressable
+            onPress={() => openPicker('end')}
+            style={({ pressed }) => [styles.dateInput, pressed && styles.dateInputPressed]}
+          >
+            <Text style={[styles.dateText, !endDate && styles.datePlaceholder]}>
+              {formatDisplayDate(endDate) ?? '날짜 선택'}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={onSubmit}
+            style={({ pressed }) => [
+              styles.submitBtn,
+              pressed && { opacity: 0.95 },
+            ]}
+          >
+            <Text style={styles.submitText}>등록하기</Text>
+          </Pressable>
+        </View>
+
+        <DateModal
+          visible={!!activePicker}
+          value={tempDate}
+          onChange={setTempDate}
+          onDismiss={() => setActivePicker(null)}
+          onConfirm={() => handleConfirmDate(activePicker, tempDate)}
         />
-
-        <Text style={[styles.label, { marginTop: 12 }]}>내용</Text>
-        <TextInput
-          style={[styles.input, { height: 120, textAlignVertical: 'top' }]}
-          value={content}
-          onChangeText={setContent}
-          multiline
-          placeholder="내용을 입력하세요"
-        />
-
-        <Text style={[styles.label, { marginTop: 12 }]}>시작일</Text>
-        <Pressable
-          onPress={() => openPicker('start')}
-          style={({ pressed }) => [styles.dateInput, pressed && styles.dateInputPressed]}
-        >
-          <Text style={[styles.dateText, !startDate && styles.datePlaceholder]}>
-            {formatDisplayDate(startDate) ?? '날짜 선택'}
-          </Text>
-        </Pressable>
-
-        <Text style={[styles.label, { marginTop: 12 }]}>종료일</Text>
-        <Pressable
-          onPress={() => openPicker('end')}
-          style={({ pressed }) => [styles.dateInput, pressed && styles.dateInputPressed]}
-        >
-          <Text style={[styles.dateText, !endDate && styles.datePlaceholder]}>
-            {formatDisplayDate(endDate) ?? '날짜 선택'}
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={onSubmit}
-          style={({ pressed }) => [
-            styles.submitBtn,
-            pressed && { opacity: 0.95 },
-          ]}
-        >
-          <Text style={styles.submitText}>등록하기</Text>
-        </Pressable>
-      </View>
-
-      <DateModal
-        visible={!!activePicker}
-        value={tempDate}
-        onChange={setTempDate}
-        onDismiss={() => setActivePicker(null)}
-        onConfirm={() => handleConfirmDate(activePicker, tempDate)}
-      />
-    </SafeAreaView>
+      </SafeAreaView>
+    </TouchableWithoutFeedback>
   );
 }
 

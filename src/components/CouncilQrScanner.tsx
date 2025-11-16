@@ -352,10 +352,26 @@ export default function CouncilQrScanner({
               <Pressable
                 onPress={() => setCameraFacing((prev) => (prev === 'back' ? 'front' : 'back'))}
                 hitSlop={10}
-                style={styles.cameraToggleButton}
+                style={({ pressed }) => [
+                  styles.cameraToggleButton,
+                  cameraFacing === 'front' && styles.cameraToggleButtonActive,
+                  pressed && styles.cameraToggleButtonPressed,
+                ]}
               >
-                <Ionicons name="camera-reverse-outline" size={16} color={COLORS.text} style={{ marginRight: 6 }} />
-                <Text style={styles.cameraToggleText}>방향 전환</Text>
+                <Ionicons
+                  name="camera-reverse-outline"
+                  size={16}
+                  color={cameraFacing === 'front' ? COLORS.primary : COLORS.text}
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  style={[
+                    styles.cameraToggleText,
+                    cameraFacing === 'front' && styles.cameraToggleTextActive,
+                  ]}
+                >
+                  방향 전환
+                </Text>
               </Pressable>
             )}
             {showSoundToggle && (
@@ -590,10 +606,20 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     backgroundColor: COLORS.bg,
   },
+  cameraToggleButtonActive: {
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.blue100,
+  },
+  cameraToggleButtonPressed: {
+    opacity: 0.88,
+  },
   cameraToggleText: {
     ...TYPO.caption,
     color: COLORS.text,
     fontFamily: 'Pretendard-Medium',
+  },
+  cameraToggleTextActive: {
+    color: COLORS.primary,
   },
   cameraSection: {
     alignItems: 'center',

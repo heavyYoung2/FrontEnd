@@ -204,25 +204,28 @@ export default function LockerApplicationsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <CouncilHeader
-        studentId="C246120"
-        title="사물함 신청 관리"
-        showBack
-        backFallbackHref="/(council)/locker"
-      />
-
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={(
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={COLORS.primary}
-            colors={[COLORS.primary]}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <View style={{ flex: 1 }}>
+          <CouncilHeader
+            studentId="C246120"
+            title="사물함 신청 관리"
+            showBack
+            backFallbackHref="/(council)/locker"
           />
-        )}
-      >
+
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={(
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor={COLORS.primary}
+                colors={[COLORS.primary]}
+              />
+            )}
+          >
         <Pressable
           onPress={() => setCreateVisible(true)}
           style={({ pressed }) => [styles.createBtn, pressed && { opacity: 0.9 }]}
@@ -328,7 +331,9 @@ export default function LockerApplicationsScreen() {
             </View>
           );
         })}
-      </ScrollView>
+          </ScrollView>
+        </View>
+      </TouchableWithoutFeedback>
 
       <CreateScheduleModal
         visible={createVisible}
@@ -451,8 +456,9 @@ function CreateScheduleModal({
       visible={visible}
       onRequestClose={onClose}
     >
-      <View style={styles.modalBackdrop}>
-        <View style={styles.modalCard}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>신청 일정 생성</Text>
             <Pressable onPress={onClose} hitSlop={10}>
@@ -550,7 +556,8 @@ function CreateScheduleModal({
             </Pressable>
           </View>
         </View>
-      </View>
+        </View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 }

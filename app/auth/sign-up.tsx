@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -11,12 +11,13 @@ import {
   Text,
   TextInput,
   View,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { COLORS } from '@/src/design/colors';
-import { signUp, SignUpPayload } from '@/src/api/auth';
+import { requestEmailCode, signUp, SignUpPayload, verifyEmailCode } from '@/src/api/auth';
 
 type Step = 'agreements' | 'email' | 'profile';
 
@@ -106,7 +107,6 @@ const AGREEMENT_DETAILS: Record<
 };
 
 const SCHOOL_EMAIL_REGEX = /^[\w.+-]+@g\.hongik\.ac\.kr$/i;
-const MOCK_CODE = '1234';
 
 const initialAgreementState: Record<AgreementKey, boolean> =
   AGREEMENT_ITEMS.reduce((acc, item) => {
@@ -130,6 +130,9 @@ export default function SignUpScreen() {
   const [resendCountdown, setResendCountdown] = useState<number | null>(null);
   const [activeAgreementKey, setActiveAgreementKey] =
     useState<AgreementKey | null>(null);
+  const [toast, setToast] = useState<{ message: string; tone: 'error' | 'info' } | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastAnim = useRef(new Animated.Value(0));
 
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
@@ -157,6 +160,45 @@ export default function SignUpScreen() {
     [password, passwordConfirm, department, studentId, name, phone],
   );
 
+  const showToast = useCallback((message: string, tone: 'error' | 'info' = 'error') => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastAnim.current.setValue(0);
+    setToast({ message, tone });
+    Animated.timing(toastAnim.current, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+    toastTimerRef.current = setTimeout(() => {
+      Animated.timing(toastAnim.current, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) {
+          setToast(null);
+        }
+      });
+    }, 2400);
+  }, []);
+
+  const getErrorMessage = useCallback((error: unknown, fallback: string) => {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'response' in error &&
+      typeof (error as any).response?.data?.message === 'string'
+    ) {
+      return (error as any).response.data.message as string;
+    }
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+    return fallback;
+  }, []);
+
   const handleToggleAgreement = (key: AgreementKey) => {
     setAgreements((prev) => ({
       ...prev,
@@ -176,40 +218,63 @@ export default function SignUpScreen() {
     setAgreements(updated);
   };
 
-  const handleSendCode = () => {
+  const handleSendCode = async () => {
     const normalized = email.trim();
     if (!SCHOOL_EMAIL_REGEX.test(normalized)) {
-      setEmailFeedback('학교 이메일(@g.hongik.ac.kr)로 입력해주세요.');
+      setEmailFeedback(null);
       setCodeFeedback(null);
       setIsCodeSent(false);
       setIsEmailVerified(false);
       setResendCountdown(null);
+      showToast('학교 이메일(@g.hongik.ac.kr)로 입력해주세요.', 'error');
       return;
     }
 
-    setEmailFeedback('인증 번호가 해당 이메일로 전송되었습니다.');
-    setCodeFeedback(null);
-    setIsCodeSent(true);
-    setCode('');
-    setResendCountdown(300);
-    setIsEmailVerified(false);
+    try {
+      await requestEmailCode({ email: normalized });
+      setEmailFeedback('인증 번호가 해당 이메일로 전송되었습니다.');
+      setCodeFeedback(null);
+      setIsCodeSent(true);
+      setCode('');
+      setResendCountdown(300);
+      setIsEmailVerified(false);
+    } catch (error) {
+      const message = getErrorMessage(error, '이메일 인증 번호 전송에 실패했습니다.');
+      setEmailFeedback(null);
+      setIsCodeSent(false);
+      setIsEmailVerified(false);
+      setResendCountdown(null);
+      showToast(message, 'error');
+    }
   };
 
-  const handleVerifyCode = () => {
+  const handleVerifyCode = async () => {
     if (!isCodeSent) {
-      setCodeFeedback('먼저 인증 번호를 전송해주세요.');
+      setCodeFeedback(null);
+      showToast('먼저 인증 번호를 전송해주세요.', 'error');
       return;
     }
 
-    if (code.trim() !== MOCK_CODE) {
-      setCodeFeedback('인증 번호가 일치하지 않습니다.');
+    const normalizedEmail = email.trim();
+    if (!SCHOOL_EMAIL_REGEX.test(normalizedEmail)) {
+      setEmailFeedback(null);
       setIsEmailVerified(false);
+      showToast('학교 이메일(@g.hongik.ac.kr)로 입력해주세요.', 'error');
       return;
     }
 
-    setCodeFeedback('인증 완료되었습니다.');
-    setIsEmailVerified(true);
-    setResendCountdown(null);
+    try {
+      await verifyEmailCode({ email: normalizedEmail, code: code.trim() });
+      setCodeFeedback('인증 완료되었습니다.');
+      setEmailFeedback(null);
+      setIsEmailVerified(true);
+      setResendCountdown(null);
+    } catch (error) {
+      const message = getErrorMessage(error, '인증 번호가 일치하지 않습니다.');
+      setCodeFeedback(null);
+      setIsEmailVerified(false);
+      showToast(message, 'error');
+    }
   };
 
   const submitSignUp = async (payload: SignUpPayload, displayName: string) => {
@@ -228,7 +293,7 @@ export default function SignUpScreen() {
         err instanceof Error && err.message
           ? err.message
           : '회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.';
-      Alert.alert('가입 실패', message);
+      showToast(message, 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -236,12 +301,12 @@ export default function SignUpScreen() {
 
   const confirmProfileSubmission = () => {
     if (!isEmailVerified) {
-      Alert.alert('이메일 인증 필요', '학교 이메일 인증을 먼저 완료해주세요.');
+      showToast('학교 이메일 인증을 먼저 완료해주세요.', 'error');
       return;
     }
 
     if (password !== passwordConfirm) {
-      Alert.alert('비밀번호를 확인해주세요', '비밀번호가 서로 일치하지 않습니다.');
+      showToast('비밀번호가 서로 일치하지 않습니다.', 'error');
       return;
     }
 
@@ -342,9 +407,10 @@ export default function SignUpScreen() {
     setResendCountdown(null);
     setIsCodeSent(false);
     if (!isEmailVerified) {
-      setEmailFeedback('인증 번호 입력 시간이 만료되었습니다. 다시 요청해주세요.');
+      setEmailFeedback(null);
       setCode('');
       setCodeFeedback(null);
+      showToast('인증 번호 입력 시간이 만료되었습니다. 다시 요청해주세요.', 'error');
     }
   }, [isEmailVerified, resendCountdown]);
 
@@ -354,6 +420,14 @@ export default function SignUpScreen() {
     }
     setCodeFeedback('인증 완료되었습니다.');
   }, [isEmailVerified]);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
 
   const formattedCountdown = useMemo(() => {
     if (resendCountdown === null || resendCountdown <= 0) {
@@ -409,7 +483,7 @@ export default function SignUpScreen() {
               뒤로
             </Text>
           </Pressable>
-          <Text style={styles.headerTitle}>회비영</Text>
+          <Text style={styles.headerTitle}>회원가입</Text>
           <View style={styles.headerSpacer} />
         </View>
 
@@ -423,13 +497,27 @@ export default function SignUpScreen() {
               <View style={[styles.section, styles.welcomeCard]}>
                 <Text style={styles.introTitle}>회비영에 오신걸 환영합니다.</Text>
                 <Text style={styles.introText}>
-                  회비영은 학교 이메일로 회원 가입이 가능하며, 학생회비 납부 여부
-                  인증도 가능합니다!
+                  회비영은 학교 이메일로 회원 가입이 가능하며,{'\n'}학생회비 납부 여부 인증도 가능합니다!
                 </Text>
               </View>
 
               <View style={[styles.section, styles.agreementCard]}>
-                <Text style={styles.sectionTitle}>서비스 이용을 위한 약관 동의</Text>
+                <View style={styles.agreementHeader}>
+                  <Text style={[styles.sectionTitle, styles.agreementTitle]}>
+                    서비스 이용을 위한 약관 동의
+                  </Text>
+                </View>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.selectAllButton,
+                    pressed && { opacity: 0.9 },
+                  ]}
+                  onPress={handleAllAgree}
+                >
+                  <Text style={styles.selectAllText}>
+                    {allAgreed ? '모두 해제하기' : '모두 동의하기'}
+                  </Text>
+                </Pressable>
                 <View style={styles.termsBlock}>
                   {AGREEMENT_ITEMS.map((item) => (
                     <View key={item.key} style={styles.agreementRow}>
@@ -465,17 +553,6 @@ export default function SignUpScreen() {
                     </View>
                   ))}
                 </View>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.selectAllButton,
-                    pressed && { opacity: 0.9 },
-                  ]}
-                  onPress={handleAllAgree}
-                >
-                  <Text style={styles.selectAllText}>
-                    {allAgreed ? '모두 해제하기' : '모두 동의하기'}
-                  </Text>
-                </Pressable>
               </View>
             </View>
           )}
@@ -707,6 +784,30 @@ export default function SignUpScreen() {
             </View>
           </View>
         </Modal>
+
+        {toast && (
+          <View style={styles.toastOverlay} pointerEvents="none">
+            <Animated.View
+              style={[
+                styles.toastCard,
+                toast.tone === 'error' ? styles.toastError : styles.toastInfo,
+                {
+                  opacity: toastAnim.current,
+                  transform: [
+                    {
+                      translateY: toastAnim.current.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [12, 0],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <Text style={styles.toastText}>{toast.message}</Text>
+            </Animated.View>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -815,11 +916,11 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
   selectAllButton: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
+    alignSelf: 'center',
+    marginTop: -2,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
     backgroundColor: COLORS.blue100,
   },
   selectAllText: {
@@ -906,8 +1007,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   introTitle: {
-    fontSize: 18,
+    fontSize: 19,
     fontFamily: 'Pretendard-Bold',
+    textAlign: 'center',
     color: COLORS.primaryNavy,
   },
   introText: {
@@ -915,9 +1017,18 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     fontFamily: 'Pretendard-Medium',
     color: COLORS.textMuted,
+    textAlign: 'center',
   },
   agreementCard: {
     gap: 16,
+  },
+  agreementHeader: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  agreementTitle: {
+    textAlign: 'center',
   },
   secondaryActionButton: {
     marginTop: 6,
@@ -1019,5 +1130,41 @@ const styles = StyleSheet.create({
     color: COLORS.bg,
     fontSize: 15,
     fontFamily: 'Pretendard-SemiBold',
+  },
+  toastOverlay: {
+    position: 'absolute',
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    backgroundColor: 'rgba(15, 23, 42, 0.18)',
+  },
+  toastCard: {
+    minWidth: '70%',
+    maxWidth: 380,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(46, 70, 240, 0.22)',
+  },
+  toastError: {
+    backgroundColor: COLORS.blue100,
+  },
+  toastInfo: {
+    backgroundColor: COLORS.blue100,
+  },
+  toastText: {
+    color: COLORS.primaryNavy,
+    fontSize: 15,
+    fontFamily: 'Pretendard-Bold',
+    textAlign: 'center',
   },
 });
