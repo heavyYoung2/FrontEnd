@@ -52,6 +52,10 @@ export default function AuthIndexScreen() {
     }
   };
 
+  const handleResetPassword = () => {
+    router.push('/auth/temp-password');
+  };
+
   useEffect(() => {
     if (loading || !role) {
       return;
@@ -143,15 +147,15 @@ export default function AuthIndexScreen() {
               </Pressable>
             </View>
 
-            <View style={styles.helperLinks}>
-              <Pressable onPress={showWipAlert} hitSlop={8}>
-                <Text style={styles.helperLinkText}>아이디 찾기</Text>
-              </Pressable>
-              <View style={styles.helperDivider} />
-              <Pressable onPress={showWipAlert} hitSlop={8}>
-                <Text style={styles.helperLinkText}>비밀번호 찾기</Text>
-              </Pressable>
-            </View>
+          <View style={styles.helperLinks}>
+            <Pressable onPress={showWipAlert} hitSlop={8}>
+              <Text style={styles.helperLinkText}>아이디 찾기</Text>
+            </Pressable>
+            <View style={styles.helperDivider} />
+            <Pressable onPress={handleResetPassword} hitSlop={8}>
+              <Text style={styles.helperLinkText}>비밀번호 찾기</Text>
+            </Pressable>
+          </View>
           </View>
 
           <Pressable
@@ -161,7 +165,7 @@ export default function AuthIndexScreen() {
             ]}
             onPress={handleBypass}
           >
-            <Text style={styles.bypassText}>로그인 없이 이용하기</Text>
+            <Text style={styles.bypassText}>테스트 계정으로 로그인하기</Text>
           </Pressable>
         </KeyboardAvoidingView>
       </TouchableWithoutFeedback>

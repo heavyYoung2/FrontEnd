@@ -119,9 +119,9 @@ export default function NoticeDetail() {
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         {/* 내용 카드 */}
         <View style={styles.card}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
             <Text style={styles.cardTitle}>{detail.title}</Text>
-            <Text style={styles.metaRight}>등록 : {createdYmd}</Text>
+            <Text style={[styles.metaRight, { alignSelf: 'flex-start' }]}>등록 : {createdYmd}</Text>
           </View>
 
           <View style={styles.row}>
@@ -167,8 +167,15 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     padding: 14,
   },
-  cardTitle: { fontSize: 20, color: COLORS.text, fontFamily: 'Pretendard-SemiBold' },
-  metaRight: { color: COLORS.muted, fontFamily: 'Pretendard-Medium' },
+  cardTitle: {
+    flex: 1,
+    fontSize: 20,
+    color: COLORS.text,
+    fontFamily: 'Pretendard-SemiBold',
+    flexWrap: 'wrap',
+    marginRight: 8,
+  },
+  metaRight: { color: COLORS.muted, fontFamily: 'Pretendard-Medium', fontSize: 12 },
   row: { flexDirection: 'row', gap: 8, marginTop: 8 },
   metaKey: { color: COLORS.muted, fontFamily: 'Pretendard-Medium' },
   metaVal: { color: COLORS.text, fontFamily: 'Pretendard-Medium' },

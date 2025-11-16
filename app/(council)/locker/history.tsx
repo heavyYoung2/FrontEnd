@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -46,36 +47,45 @@ export default function LockerHistoryScreen() {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const skipAutoLoadRef = useRef(false);
 
-  // 학기 목록 로딩
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        setSemesterLoading(true);
-        const list = await fetchLockerAssignmentSemesters();
-        if (!mounted) return;
-        setSemesters(list);
-        setSelectedSemester(schedule ?? list[0] ?? null);
-      } catch (err: any) {
-        console.warn('[locker-history] semesters fail', err);
-        setError(err?.response?.data?.message || err?.message || '학기 정보를 불러오지 못했습니다.');
-      } finally {
-        if (mounted) setSemesterLoading(false);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
+  const loadSemesters = useCallback(async () => {
+    setSemesterLoading(true);
+    setError(null);
+    try {
+      const list = await fetchLockerAssignmentSemesters();
+      setSemesters(list);
+      let next: string | null = null;
+      setSelectedSemester((prev) => {
+        next =
+          (prev && list.includes(prev))
+            ? prev
+            : (schedule && list.includes(schedule))
+              ? schedule
+              : list[0] ?? null;
+        return next;
+      });
+      return next;
+    } catch (err: any) {
+      console.warn('[locker-history] semesters fail', err);
+      setError(err?.response?.data?.message || err?.message || '학기 정보를 불러오지 못했습니다.');
+      return null;
+    } finally {
+      setSemesterLoading(false);
+    }
   }, [schedule]);
+
+  useEffect(() => {
+    loadSemesters();
+  }, [loadSemesters]);
 
   const loadAssignments = useCallback(async (semester?: string | null) => {
     try {
       setLoading(true);
       setError(null);
       const raw = await fetchLockerAssignments(semester ? { semester } : undefined);
-        setLockersBySection(normalizeAssignments(raw));
+      setLockersBySection(normalizeAssignments(raw));
     } catch (err: any) {
       console.warn('[locker-history] fetch fail', err);
       setError(err?.response?.data?.message || err?.message || '사물함 정보를 불러오지 못했습니다.');
@@ -85,10 +95,21 @@ export default function LockerHistoryScreen() {
   }, []);
 
   useEffect(() => {
-    if (!semesterLoading) {
-      loadAssignments(selectedSemester);
-    }
+    if (semesterLoading || skipAutoLoadRef.current) return;
+    loadAssignments(selectedSemester);
   }, [loadAssignments, selectedSemester, semesterLoading]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    skipAutoLoadRef.current = true;
+    try {
+      const next = await loadSemesters();
+      await loadAssignments(next);
+    } finally {
+      skipAutoLoadRef.current = false;
+      setRefreshing(false);
+    }
+  }, [loadAssignments, loadSemesters]);
 
   const flatList = useMemo(() => {
     const entries = Object.values(lockersBySection).flat();
@@ -110,6 +131,14 @@ export default function LockerHistoryScreen() {
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
+        refreshControl={(
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
+          />
+        )}
       >
         <View style={styles.semesterRow}>
           <Text style={styles.semesterLabel}>학기 선택</Text>
@@ -165,35 +194,28 @@ export default function LockerHistoryScreen() {
           </View>
         )}
 
-        {!loading && !error && (
-          <View style={styles.tableCard}>
-            <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderText, { flex: 1 }]}>사물함</Text>
-              <Text style={[styles.tableHeaderText, { flex: 1 }]}>학번</Text>
-              <Text style={[styles.tableHeaderText, { flex: 1.5 }]}>이름</Text>
-              <Text style={[styles.tableHeaderText, { width: 70 }]}>상태</Text>
-            </View>
-            {flatList.length > 0 ? (
-              flatList.map((locker) => (
-                <View key={locker.id} style={styles.tableRow}>
-                  <Text style={[styles.tableCell, styles.tableLocker]}>{locker.label}</Text>
-                  <Text style={styles.tableCell}>{locker.studentId || '-'}</Text>
-                  <Text style={[styles.tableCell, { flex: 1.5 }]}>{locker.studentName || '배정자 없음'}</Text>
-                  <View style={styles.tableStatusCell}>
-                    <Text
-                      style={[
-                        styles.tableStatus,
-                        locker.status === 'IN_USE' ? styles.tableStatusInUse : styles.tableStatusAvailable,
-                      ]}
-                    >
-                      {locker.status === 'IN_USE' ? '사용중' : '사용 가능'}
-                    </Text>
-                  </View>
+            {!loading && !error && (
+              <View style={styles.tableCard}>
+                <View style={styles.tableHeader}>
+                  <Text style={[styles.tableHeaderText, styles.tableLocker, styles.headerCenter]}>사물함</Text>
+                  <Text style={[styles.tableHeaderText, styles.tableStudentId, styles.headerCenter]}>학번</Text>
+                  <Text style={[styles.tableHeaderText, styles.tableName, styles.headerCenter]}>이름</Text>
                 </View>
-              ))
-            ) : (
-              <View style={styles.tableEmptyRow}>
-                <Text style={styles.emptyState}>사물함 내역이 없습니다.</Text>
+                {flatList.length > 0 ? (
+                  flatList.map((locker) => (
+                    <View key={locker.id} style={styles.tableRow}>
+                      <Text style={[styles.tableCell, styles.tableLocker, styles.cellCenter]}>{locker.label}</Text>
+                      <Text style={[styles.tableCell, styles.tableStudentId, styles.cellCenter]}>
+                        {locker.studentId || '-'}
+                      </Text>
+                      <Text style={[styles.tableCell, styles.tableName, styles.cellCenter]}>
+                        {locker.studentName || '배정자 없음'}
+                      </Text>
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.tableEmptyRow}>
+                    <Text style={styles.emptyState}>사물함 내역이 없습니다.</Text>
               </View>
             )}
           </View>
@@ -320,7 +342,7 @@ const styles = StyleSheet.create({
   tableHeader: {
     flexDirection: 'row',
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     backgroundColor: '#F4F6FB',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
@@ -334,8 +356,8 @@ const styles = StyleSheet.create({
   tableRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
   },
@@ -345,29 +367,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: COLORS.text,
     textAlign: 'center',
+    includeFontPadding: false,
   },
   tableLocker: {
-    flex: 0.8,
+    flex: 1,
   },
-  tableStatusCell: {
-    width: 80,
-    alignItems: 'center',
+  tableStudentId: {
+    flex: 1,
   },
-  tableStatus: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    fontFamily: 'Pretendard-SemiBold',
-    fontSize: 12,
+  tableName: {
+    flex: 1,
+  },
+  headerCenter: {
     textAlign: 'center',
   },
-  tableStatusInUse: {
-    backgroundColor: '#FEE2E2',
-    color: COLORS.danger,
-  },
-  tableStatusAvailable: {
-    backgroundColor: '#DCFCE7',
-    color: '#15803D',
+  cellCenter: {
+    textAlign: 'center',
   },
   tableEmptyRow: {
     paddingVertical: 40,

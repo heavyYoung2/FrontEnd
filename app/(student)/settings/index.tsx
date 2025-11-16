@@ -25,7 +25,7 @@ const MENU = [
 
 export default function StudentSettingsHome() {
   const router = useRouter();
-  const { logout } = useAuth();
+  const { logout, canAccessCouncil, rawRole } = useAuth();
 
   const handleAction = (action: (typeof MENU)[number]['action']) => {
     switch (action) {
@@ -61,6 +61,13 @@ export default function StudentSettingsHome() {
         router.push('/(student)/settings/guide');
         break;
       case 'switch-role':
+        if (!canAccessCouncil) {
+          Alert.alert(
+            '학생회 접근 권한이 없습니다!',
+            '학생회 접근 권한을 받으려면 승인을 받아야합니다.',
+          );
+          return;
+        }
         router.replace('/(council)/mypage');
         break;
       default:

@@ -7,6 +7,10 @@ type Role = 'student' | 'council' | null;
 
 type AuthContextValue = {
   role: Role;
+  /** 서버에서 내려준 원본 역할 (예: STUDENT / COUNCIL / ADMIN / OWNER) */
+  rawRole: string | null;
+  /** 학생회 화면 접근 가능 여부 */
+  canAccessCouncil: boolean;
   memberId: number | null;
   email: string | null;
   status: string | null;
@@ -29,6 +33,8 @@ const STORAGE_KEYS = {
 const SERVER_ROLE_TO_APP_ROLE: Record<string, Role> = {
   STUDENT: 'student',
   COUNCIL: 'council',
+  ADMIN: 'council',
+  OWNER: 'council',
 };
 const DEFAULT_ROLE: Role = 'student';
 
@@ -54,8 +60,15 @@ const normalizeServerRole = (role?: string | null): Role => {
   return SERVER_ROLE_TO_APP_ROLE[key] ?? DEFAULT_ROLE;
 };
 
+const canAccessCouncil = (role?: string | null) => {
+  const key = (role ?? '').toUpperCase();
+  return key === 'COUNCIL' || key === 'ADMIN' || key === 'OWNER';
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [role, setRole] = useState<Role>(null);
+  const [rawRole, setRawRole] = useState<string | null>(null);
+  const [councilAccess, setCouncilAccess] = useState(false);
   const [memberId, setMemberId] = useState<number | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -79,9 +92,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setAuthToken(storedAccessToken);
         }
 
-        const restoredRole =
-          savedRole === 'student' || savedRole === 'council' ? (savedRole as Role) : null;
-        setRole(restoredRole);
+        const restoredRole = savedRole || null;
+        setRawRole(restoredRole);
+        setRole(normalizeServerRole(restoredRole));
+        setCouncilAccess(canAccessCouncil(restoredRole));
         setEmail(storedEmail || null);
         setMemberId(toNumberOrNull(storedMemberId));
         setStatus(storedStatus || null);
@@ -104,6 +118,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setAuthToken(null);
       setRole(null);
+      setRawRole(null);
+      setCouncilAccess(false);
       setEmail(null);
       setMemberId(null);
       setStatus(null);
@@ -114,22 +130,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (payload: LoginPayload) => {
     const response = await requestLogin(payload);
     const mappedRole = normalizeServerRole(response.role);
+    const raw = response.role ?? null;
 
     await Promise.all([
-      SecureStore.setItemAsync(STORAGE_KEYS.ROLE, mappedRole),
+      SecureStore.setItemAsync(STORAGE_KEYS.ROLE, raw ?? ''),
       SecureStore.setItemAsync(STORAGE_KEYS.ACCESS, response.accessToken),
       SecureStore.setItemAsync(STORAGE_KEYS.REFRESH, response.refreshToken ?? ''),
-      SecureStore.setItemAsync(STORAGE_KEYS.EMAIL, response.email ?? ''),
+      SecureStore.setItemAsync(STORAGE_KEYS.EMAIL, payload.email ?? ''),
       SecureStore.setItemAsync(STORAGE_KEYS.MEMBER_ID, String(response.memberId ?? '')),
-      SecureStore.setItemAsync(STORAGE_KEYS.STATUS, response.status ?? ''),
+      SecureStore.setItemAsync(STORAGE_KEYS.STATUS, ''),
       SecureStore.setItemAsync(STORAGE_KEYS.STUDENT_ID, response.studentId ?? ''),
     ]);
 
     setAuthToken(response.accessToken);
     setRole(mappedRole);
-    setEmail(response.email ?? null);
+    setRawRole(raw);
+    setCouncilAccess(canAccessCouncil(raw));
+    setEmail(payload.email ?? null);
     setMemberId(response.memberId ?? null);
-    setStatus(response.status ?? null);
+    setStatus(null);
     setStudentId(response.studentId ?? null);
   };
 
@@ -144,7 +163,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthCtx.Provider value={{ role, memberId, email, status, studentId, loading, login, logout }}>
+    <AuthCtx.Provider
+      value={{
+        role,
+        rawRole,
+        canAccessCouncil: councilAccess,
+        memberId,
+        email,
+        status,
+        studentId,
+        loading,
+        login,
+        logout,
+      }}
+    >
       {children}
     </AuthCtx.Provider>
   );

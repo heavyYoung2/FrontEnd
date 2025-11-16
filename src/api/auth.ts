@@ -38,6 +38,11 @@ type VerifyEmailCodeResult = {
   message: string;
 };
 
+type TempPasswordResult = {
+  email: string;
+  message: string;
+};
+
 export async function signUp(payload: SignUpPayload): Promise<number> {
   const { data } = await api.post<ApiResponse<SignUpResult>>('/api/auth/sign-in', payload);
 
@@ -60,9 +65,7 @@ export type LoginPayload = {
 
 export type LoginResult = {
   memberId: number;
-  email: string;
   role: string;
-  status: string;
   studentId?: string | null;
   accessToken: string;
   refreshToken: string;
@@ -110,6 +113,20 @@ export async function verifyEmailCode(
 
   if (!data?.isSuccess || !data.result) {
     throw new Error(data?.message ?? '이메일 인증에 실패했습니다.');
+  }
+
+  return data.result;
+}
+
+export async function issueTempPassword(email: string): Promise<TempPasswordResult> {
+  const { data } = await api.post<ApiResponse<TempPasswordResult>>(
+    '/api/auth/tmp-password',
+    null,
+    { params: { email } },
+  );
+
+  if (!data?.isSuccess || !data.result) {
+    throw new Error(data?.message ?? '임시 비밀번호 발급에 실패했습니다.');
   }
 
   return data.result;

@@ -109,13 +109,6 @@ export default function LockerTab() {
 
   const selectedState = sectionStates[selectedSection] ?? EMPTY_SECTION;
 
-  useEffect(() => {
-    if (sectionStates.A.status === 'idle') {
-      loadSection('A');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const loadSection = useCallback(async (section: SectionId) => {
     setSectionStates((prev) => ({
       ...prev,
@@ -155,6 +148,10 @@ export default function LockerTab() {
       setRefreshing(false);
     }
   }, [loadSection]);
+
+  useEffect(() => {
+    handleRefresh();
+  }, [handleRefresh]);
 
   const handleOpenSection = (section: SectionId) => {
     setSelectedSection(section);

@@ -81,11 +81,13 @@ export default function StudentHome() {
       style={({ pressed }) => [styles.row, pressed && { opacity: 0.95 }]}
     >
       <View style={{ flex: 1 }}>
-        <Text style={styles.rowTitle}>{item.title}</Text>
-        <View style={styles.metaList}>
+        <View style={styles.titleRow}>
+          <Text style={styles.rowTitle}>{item.title}</Text>
           <Text style={styles.metaText}>
             등록 | <Text style={styles.metaDate}>{toYMDfromDateTime(item.eventCreatedAt)}</Text>
           </Text>
+        </View>
+        <View style={styles.metaList}>
           <Text style={styles.metaText}>
             시작 | <Text style={styles.metaDate}>{item.eventStartDate}</Text>
           </Text>
@@ -170,10 +172,23 @@ const styles = StyleSheet.create({
   },
 
   row: { paddingHorizontal: 12, paddingVertical: 14, flexDirection: 'row', alignItems: 'center' },
-  rowTitle: { fontSize: 15, color: COLORS.text, fontFamily: 'Pretendard-SemiBold', marginBottom: 8 },
+  rowTitle: {
+    flex: 1,
+    fontSize: 15,
+    color: COLORS.text,
+    fontFamily: 'Pretendard-SemiBold',
+    flexWrap: 'wrap',
+    marginRight: 8,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
 
-  metaList: { gap: 3 },
-  metaText: { fontSize: 12, color: COLORS.muted, fontFamily: 'Pretendard-Medium' },
+  metaList: { gap: 3, marginTop: 8 },
+  metaText: { fontSize: 12, color: COLORS.muted, fontFamily: 'Pretendard-Medium', flexShrink: 0 },
   metaDate: { color: COLORS.muted, fontFamily: 'Pretendard-Medium' },
 
   separator: { height: 1, backgroundColor: COLORS.border, marginHorizontal: 8 },
