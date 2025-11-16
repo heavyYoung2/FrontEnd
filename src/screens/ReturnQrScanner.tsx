@@ -81,6 +81,7 @@ export default function ReturnQrScanner({
       invalidActionLabel="다시 시도"
       successSpeech="반납되었습니다"
       deniedSpeech="반납이 불가합니다"
+      allowCameraToggle
       showHeaderRefresh={showHeaderRefresh}
       onProcess={handleProcess}
     />

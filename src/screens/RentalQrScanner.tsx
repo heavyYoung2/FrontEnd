@@ -80,6 +80,7 @@ export default function RentalQrScanner({
       invalidActionLabel="다시 시도"
       successSpeech="대여가 완료되었습니다"
       deniedSpeech="대여가 불가합니다"
+      allowCameraToggle
       showHeaderRefresh={showHeaderRefresh}
       onProcess={handleProcess}
     />

@@ -20,8 +20,12 @@ import { format } from 'date-fns';
 import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '@/src/design/colors';
 import {
+  assignLockersByApplication,
   createLockerApplication,
+  fetchLockerApplicationDetail,
   fetchLockerApplications,
+  finishLockerApplication,
+  LockerApplicationDetailInfoApi,
   LockerApplicationInfoApi,
 } from '@/src/api/locker';
 
@@ -85,6 +89,7 @@ export default function LockerApplicationsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [createVisible, setCreateVisible] = useState(false);
   const [detailSchedule, setDetailSchedule] = useState<ApplicationSchedule | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const loadSchedules = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) setLoading(true);
@@ -104,6 +109,11 @@ export default function LockerApplicationsScreen() {
   useEffect(() => {
     loadSchedules();
   }, [loadSchedules]);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
@@ -144,9 +154,53 @@ export default function LockerApplicationsScreen() {
     [loadSchedules],
   );
 
-  const handleToggleStatus = useCallback((scheduleId: string) => {
-    setSchedules(prev => prev.map((item) => (item.id === scheduleId ? { ...item, isOpen: !item.isOpen } : item)));
+  const handleToggleStatus = useCallback((scheduleId: string, updates: Partial<ApplicationSchedule>) => {
+    setSchedules(prev => prev.map((item) => (item.id === scheduleId ? { ...item, ...updates } : item)));
   }, []);
+
+  const handleFinishApplication = useCallback(
+    async (target: ApplicationSchedule) => {
+      const numericId = Number(target.id);
+      if (Number.isNaN(numericId)) {
+        Alert.alert('오류', '잘못된 신청 ID입니다.');
+        return;
+      }
+      try {
+        await finishLockerApplication(numericId);
+        Alert.alert('완료', `${target.semester} 신청을 마감했습니다.`);
+        handleToggleStatus(target.id, { isOpen: false });
+        setDetailSchedule((prev) => (prev && prev.id === target.id ? { ...prev, isOpen: false } : prev));
+      } catch (err: any) {
+        const message = err?.response?.data?.message || err?.message || '사물함 신청 마감에 실패했습니다.';
+        Alert.alert('오류', message);
+        throw err;
+      }
+    },
+    [handleToggleStatus],
+  );
+
+  const handleAssignApplication = useCallback(
+    async (target: ApplicationSchedule) => {
+      const numericId = Number(target.id);
+      if (Number.isNaN(numericId)) {
+        Alert.alert('오류', '잘못된 신청 ID입니다.');
+        return;
+      }
+      try {
+        await assignLockersByApplication(numericId);
+        Alert.alert('완료', `${target.semester} 신청에 대해 사물함을 일괄 배정했습니다.`);
+        setSchedules((prev) =>
+          prev.map((item) => (item.id === target.id ? { ...item, canAssign: false } : item)),
+        );
+        setDetailSchedule((prev) => (prev && prev.id === target.id ? { ...prev, canAssign: false } : prev));
+      } catch (err: any) {
+        const message = err?.response?.data?.message || err?.message || '사물함 일괄 배정에 실패했습니다.';
+        Alert.alert('오류', message);
+        throw err;
+      }
+    },
+    [],
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -206,43 +260,74 @@ export default function LockerApplicationsScreen() {
           </View>
         )}
 
-        {!loading && !error && sortedSchedules.map((item) => (
-          <View key={item.id} style={styles.scheduleCard}>
-            <View style={styles.scheduleHeader}>
-              <View style={{ gap: 4 }}>
-                <Text style={styles.scheduleTitle}>{item.semester} ({item.method})</Text>
-                <Text style={styles.scheduleRange}>{formatDateTime(item.startAt)} ~ {formatDateTime(item.endAt)}</Text>
+        {!loading && !error && sortedSchedules.map((item) => {
+          const status = getScheduleStatus(item, now);
+          return (
+            <View key={item.id} style={styles.scheduleCard}>
+              <View style={styles.scheduleHeader}>
+                <View style={{ gap: 4 }}>
+                  <Text style={styles.scheduleTitle}>{item.semester} ({item.method})</Text>
+                  <Text style={styles.scheduleRange}>{formatDateTime(item.startAt)} ~ {formatDateTime(item.endAt)}</Text>
+                </View>
+                <View style={[
+                  styles.statusChip,
+                  status.kind === 'available'
+                    ? styles.statusOpen
+                    : status.kind === 'upcoming'
+                      ? styles.statusUpcoming
+                      : styles.statusClosed,
+                ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusText,
+                      status.kind === 'available'
+                        ? styles.statusTextOpen
+                        : status.kind === 'upcoming'
+                          ? styles.statusTextUpcoming
+                          : styles.statusTextClosed,
+                    ]}
+                  >
+                    {status.label}
+                  </Text>
+                </View>
               </View>
-              <View style={[styles.statusChip, item.isOpen ? styles.statusOpen : styles.statusClosed]}>
-                <Text style={[styles.statusText, item.isOpen ? styles.statusTextOpen : styles.statusTextClosed]}>
-                  {item.isOpen ? '신청 가능' : '마감'}
-                </Text>
+
+              <View style={styles.scheduleTimelineRow}>
+                <View style={styles.scheduleTimelineItem}>
+                  <Text style={styles.scheduleTimelineLabel}>시작</Text>
+                  <Text style={styles.scheduleTimelineValue}>{formatDateTime(item.startAt)}</Text>
+                </View>
+                <View style={styles.scheduleTimelineItem}>
+                  <Text style={styles.scheduleTimelineLabel}>종료</Text>
+                  <Text style={styles.scheduleTimelineValue}>{formatDateTime(item.endAt)}</Text>
+                </View>
+              </View>
+
+              {!!item.notes && <Text style={styles.scheduleNote}>{item.notes}</Text>}
+
+              <View style={styles.scheduleMetaRow}>
+                <MetaItem label="신청 방식" value={item.method} />
+                <MetaItem label="배정 상태" value={item.canAssign ? '배정 가능' : '배정 마감'} />
+              </View>
+
+              <View style={styles.scheduleActions}>
+                <Pressable
+                  onPress={() => router.push({ pathname: '/(council)/locker/history', params: { schedule: item.semester } })}
+                  style={({ pressed }) => [styles.outlineBtn, pressed && { opacity: 0.85 }]}
+                >
+                  <Text style={styles.outlineBtnText}>배정 내역</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => handleOpenDetail(item)}
+                  style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.9 }]}
+                >
+                  <Text style={styles.primaryBtnText}>상세보기</Text>
+                </Pressable>
               </View>
             </View>
-
-            {!!item.notes && <Text style={styles.scheduleNote}>{item.notes}</Text>}
-
-            <View style={styles.scheduleMetaRow}>
-              <MetaItem label="신청 방식" value={item.method} />
-              <MetaItem label="배정 상태" value={item.canAssign ? '배정 가능' : '배정 마감'} />
-            </View>
-
-            <View style={styles.scheduleActions}>
-              <Pressable
-                onPress={() => router.push({ pathname: '/(council)/locker/history', params: { schedule: item.semester } })}
-                style={({ pressed }) => [styles.outlineBtn, pressed && { opacity: 0.85 }]}
-              >
-                <Text style={styles.outlineBtnText}>배정 내역</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => handleOpenDetail(item)}
-                style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.9 }]}
-              >
-                <Text style={styles.primaryBtnText}>상세보기</Text>
-              </Pressable>
-            </View>
-          </View>
-        ))}
+          );
+        })}
       </ScrollView>
 
       <CreateScheduleModal
@@ -253,14 +338,10 @@ export default function LockerApplicationsScreen() {
 
       <ScheduleDetailModal
         schedule={detailSchedule}
+        now={now}
         onClose={() => setDetailSchedule(null)}
-        onToggleStatus={(scheduleId) => {
-          handleToggleStatus(scheduleId);
-          setDetailSchedule((prev) => (prev ? { ...prev, isOpen: !prev.isOpen } : prev));
-        }}
-        onAssignAll={(schedule) => {
-          Alert.alert('사물함 배정', `${schedule.semester} 학기 사물함을 일괄 배정했습니다.`);
-        }}
+        onFinishApplication={handleFinishApplication}
+        onAssignAll={handleAssignApplication}
       />
     </SafeAreaView>
   );
@@ -272,8 +353,38 @@ function formatDateTime(value: string | Date) {
   return format(date, 'yyyy-MM-dd HH:mm');
 }
 
+function formatDateTimeWithMillis(value: string | Date) {
+  const date = typeof value === 'string' ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return typeof value === 'string' ? value : '';
+  return format(date, 'yyyy-MM-dd HH:mm:ss.SSS');
+}
+
 function formatLocalDatePayload(date: Date) {
   return format(date, "yyyy-MM-dd'T'HH:mm:ss");
+}
+
+type ScheduleStatusKind = 'upcoming' | 'available' | 'closed';
+
+function getScheduleStatus(schedule: ApplicationSchedule, referenceTime: number): {
+  label: string;
+  kind: ScheduleStatusKind;
+} {
+  if (schedule.isOpen) {
+    return { label: '신청 가능', kind: 'available' };
+  }
+
+  const start = Date.parse(schedule.startAt);
+  const end = Date.parse(schedule.endAt);
+
+  if (!Number.isNaN(start) && referenceTime < start) {
+    return { label: '신청 전', kind: 'upcoming' };
+  }
+
+  if (!Number.isNaN(end) && referenceTime > end) {
+    return { label: '신청 마감', kind: 'closed' };
+  }
+
+  return { label: '신청 불가', kind: 'closed' };
 }
 
 function MetaItem({ label, value }: { label: string; value: string }) {
@@ -485,18 +596,102 @@ function DateInput({
 
 function ScheduleDetailModal({
   schedule,
+  now,
   onClose,
-  onToggleStatus,
+  onFinishApplication,
   onAssignAll,
 }: {
   schedule: ApplicationSchedule | null;
+  now: number;
   onClose: () => void;
-  onToggleStatus: (scheduleId: string) => void;
+  onFinishApplication: (schedule: ApplicationSchedule) => Promise<void> | void;
   onAssignAll: (schedule: ApplicationSchedule) => void;
 }) {
+  const [detail, setDetail] = useState<LockerApplicationDetailInfoApi | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [finishing, setFinishing] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+
+  useEffect(() => {
+    if (!schedule) {
+      setDetail(null);
+      setDetailError(null);
+      setDetailLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const numericId = Number(schedule.id);
+    if (Number.isNaN(numericId)) {
+      setDetailError('잘못된 신청 ID입니다.');
+      setDetail(null);
+      return;
+    }
+
+    setDetailLoading(true);
+    setDetailError(null);
+    fetchLockerApplicationDetail(numericId)
+      .then((data) => {
+        if (!cancelled) setDetail(data);
+      })
+      .catch((err: any) => {
+        if (cancelled) return;
+        const message = err?.response?.data?.message || err?.message || '사물함 신청 상세를 불러오지 못했습니다.';
+        setDetailError(message);
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [schedule, reloadKey]);
+
+  const handleRetryDetail = useCallback(() => {
+    setReloadKey((prev) => prev + 1);
+  }, []);
+
+  const handleFinishPress = useCallback(async () => {
+    if (!schedule) return;
+    try {
+      setFinishing(true);
+      await onFinishApplication(schedule);
+      setReloadKey((prev) => prev + 1);
+    } catch {
+      // parent shows alert
+    } finally {
+      setFinishing(false);
+    }
+  }, [onFinishApplication, schedule]);
+
+  const handleAssignPress = useCallback(async () => {
+    if (!schedule) return;
+    const disabled = detail ? !detail.canAssign : !schedule.canAssign;
+    if (disabled) return;
+    try {
+      setAssigning(true);
+      await onAssignAll(schedule);
+      setReloadKey((prev) => prev + 1);
+    } catch {
+      // parent handles errors
+    } finally {
+      setAssigning(false);
+    }
+  }, [detail, onAssignAll, schedule]);
+
   if (!schedule) return null;
 
-  const assignDisabled = !schedule.canAssign;
+  type ApplicantEntry = LockerApplicationDetailInfoApi['applicants'][number] | LockerApplicant;
+
+  const startAt = detail?.applicationStartAt ?? schedule.startAt;
+  const endAt = detail?.applicationEndAt ?? schedule.endAt;
+  const applicantEntries: ApplicantEntry[] = detail ? detail.applicants : schedule.applicants;
+  const applicantTotalCount = detail?.applicantTotalCount ?? applicantEntries.length;
+  const assignDisabled = detail ? !detail.canAssign : !schedule.canAssign;
+  const status = getScheduleStatus(schedule, now);
 
   return (
     <Modal
@@ -509,86 +704,184 @@ function ScheduleDetailModal({
         <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{schedule.semester} 신청 상세</Text>
-            <Pressable onPress={onClose} hitSlop={10}>
-              <Ionicons name="close" size={20} color={COLORS.text} />
-            </Pressable>
-          </View>
+            <View style={styles.modalHeaderActions}>
+              <View
+                style={[
+                  styles.statusChip,
+                  status.kind === 'available'
+                    ? styles.statusOpen
+                    : status.kind === 'upcoming'
+                      ? styles.statusUpcoming
+                      : styles.statusClosed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusText,
+                    status.kind === 'available'
+                      ? styles.statusTextOpen
+                      : status.kind === 'upcoming'
+                        ? styles.statusTextUpcoming
+                        : styles.statusTextClosed,
+                  ]}
+                >
+                  {status.label}
+                </Text>
+              </View>
 
-          <View style={styles.scheduleMetaRow}>
-            <MetaItem label="신청 방식" value={schedule.method} />
-            <MetaItem label="신청 상태" value={schedule.isOpen ? '신청 가능' : '신청 마감'} />
-          </View>
-
-          <View style={styles.detailNotes}>
-            <Text style={styles.detailNotesLabel}>신청 기간</Text>
-            <Text style={styles.detailNotesValue}>
-              {formatDateTime(schedule.startAt)} ~ {formatDateTime(schedule.endAt)}
-            </Text>
-          </View>
-
-          <View style={styles.detailNotes}>
-            <Text style={styles.detailNotesLabel}>배정 상태</Text>
-            <Text style={styles.detailNotesValue}>{schedule.canAssign ? '배정 가능' : '배정 마감'}</Text>
-          </View>
-
-          {!!schedule.notes && (
-            <View style={styles.detailNotes}>
-              <Text style={styles.detailNotesLabel}>알림</Text>
-              <Text style={styles.detailNotesValue}>{schedule.notes}</Text>
+              <Pressable onPress={onClose} hitSlop={10} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={20} color={COLORS.text} />
+              </Pressable>
             </View>
-          )}
-
-          <Pressable
-            onPress={() => onToggleStatus(schedule.id)}
-            style={({ pressed }) => [styles.primaryBtn, pressed && { opacity: 0.9 }]}
-          >
-            <Text style={styles.primaryBtnText}>
-              신청 {schedule.isOpen ? '마감하기' : '열기'}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            disabled={assignDisabled}
-            onPress={() => onAssignAll(schedule)}
-            style={({ pressed }) => [
-              styles.outlineBtn,
-              assignDisabled && styles.disabledBtn,
-              pressed && !assignDisabled && { opacity: 0.85 },
-            ]}
-          >
-            <Text style={[styles.outlineBtnText, assignDisabled && styles.disabledBtnText]}>
-              전체 배정 실행
-            </Text>
-          </Pressable>
-
-          <View style={styles.applicantsSection}>
-            <Text style={styles.applicantsTitle}>신청자 목록</Text>
-            {schedule.applicants.length === 0 ? (
-              <Text style={styles.emptyApplicants}>신청자가 없습니다.</Text>
-            ) : (
-              schedule.applicants.map((applicant) => (
-                <View key={applicant.id} style={styles.applicantRow}>
-                  <View>
-                    <Text style={styles.applicantName}>{applicant.name}</Text>
-                    <Text style={styles.applicantId}>{applicant.memberId}</Text>
-                  </View>
-                  <Text style={styles.applicantApplied}>
-                    {formatDateTime(applicant.appliedAt)}
-                  </Text>
-                </View>
-              ))
-            )}
           </View>
 
-          <Pressable
-            onPress={onClose}
-            style={({ pressed }) => [styles.modalConfirm, pressed && { opacity: 0.9 }]}
+          <ScrollView
+            contentContainerStyle={styles.modalScroll}
+            showsVerticalScrollIndicator={false}
           >
-            <Text style={styles.modalConfirmText}>닫기</Text>
-          </Pressable>
+            <View style={styles.scheduleMetaRow}>
+              <MetaItem label="신청 방식" value={schedule.method} />
+            </View>
+
+            <View style={styles.detailTimelineRow}>
+              <DetailTimelineItem label="시작" value={formatDateTime(startAt)} />
+              <DetailTimelineItem label="종료" value={formatDateTime(endAt)} />
+            </View>
+
+            <View style={styles.detailStatsRow}>
+              <DetailStatCard label="신청자 수" value={`${applicantTotalCount}명`} />
+              <DetailStatCard
+                label="배정 상태"
+                value={assignDisabled ? '배정 마감' : '배정 가능'}
+                tone={assignDisabled ? 'danger' : 'primary'}
+              />
+            </View>
+
+            {!!schedule.notes && (
+              <View style={styles.detailNotes}>
+                <Text style={styles.detailNotesLabel}>알림</Text>
+                <Text style={styles.detailNotesValue}>{schedule.notes}</Text>
+              </View>
+            )}
+
+            {detailLoading && (
+              <View style={styles.detailStateBox}>
+                <ActivityIndicator size="small" color={COLORS.primary} />
+                <Text style={styles.detailStateText}>신청 상세를 불러오는 중입니다.</Text>
+              </View>
+            )}
+
+            {detailError && !detailLoading && (
+              <Pressable
+                onPress={handleRetryDetail}
+                style={({ pressed }) => [styles.detailStateBox, pressed && { opacity: 0.9 }]}
+              >
+                <Text style={[styles.detailStateText, { color: COLORS.danger }]}>{detailError}</Text>
+                <Text style={styles.detailStateHelper}>다시 시도하려면 눌러주세요.</Text>
+              </Pressable>
+            )}
+
+            <Pressable
+              disabled={finishing || !schedule.isOpen}
+              onPress={handleFinishPress}
+              style={({ pressed }) => [
+                styles.primaryBtn,
+                (pressed || finishing) && { opacity: 0.9 },
+                (!schedule.isOpen || finishing) && { backgroundColor: '#94A3B8' },
+              ]}
+            >
+              <Text style={styles.primaryBtnText}>
+                {finishing ? '마감 처리 중...' : '사물함 신청 마감하기'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              disabled={assignDisabled || assigning}
+              onPress={handleAssignPress}
+              style={({ pressed }) => [
+                styles.outlineBtn,
+                (assignDisabled || assigning) && styles.disabledBtn,
+                pressed && !assignDisabled && !assigning && { opacity: 0.85 },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.outlineBtnText,
+                  (assignDisabled || assigning) && styles.disabledBtnText,
+                ]}
+              >
+                {assigning ? '배정 중...' : '사물함 일괄 배정'}
+              </Text>
+            </Pressable>
+
+            <View style={styles.applicantsSection}>
+              <Text style={styles.applicantsTitle}>신청자 목록 ({applicantTotalCount}명)</Text>
+              {applicantEntries.length === 0 ? (
+                <Text style={styles.emptyApplicants}>신청자가 없습니다.</Text>
+              ) : (
+                applicantEntries.map((applicant, index) => {
+                  const name = 'studentName' in applicant ? applicant.studentName : applicant.name;
+                  const idValue = 'studentId' in applicant ? applicant.studentId : applicant.memberId;
+                  const key = idValue ? `${idValue}-${index}` : `applicant-${index}`;
+                  return (
+                    <View key={key} style={styles.applicantRow}>
+                      <View>
+                        <Text style={styles.applicantName}>{name}</Text>
+                        {!!idValue && <Text style={styles.applicantId}>{idValue}</Text>}
+                      </View>
+                    <Text style={styles.applicantApplied}>
+                      {formatDateTimeWithMillis(applicant.appliedAt)}
+                    </Text>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+
+            <Pressable
+              onPress={onClose}
+              style={({ pressed }) => [styles.modalConfirm, pressed && { opacity: 0.9 }]}
+            >
+              <Text style={styles.modalConfirmText}>닫기</Text>
+            </Pressable>
+          </ScrollView>
         </View>
       </View>
     </Modal>
+  );
+}
+
+function DetailTimelineItem({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.detailTimelineItem}>
+      <Text style={styles.detailTimelineLabel}>{label}</Text>
+      <Text style={styles.detailTimelineValue}>{value}</Text>
+    </View>
+  );
+}
+
+function DetailStatCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: 'primary' | 'danger';
+}) {
+  return (
+    <View style={styles.detailStatCard}>
+      <Text style={styles.detailStatLabel}>{label}</Text>
+      <Text
+        style={[
+          styles.detailStatValue,
+          tone === 'primary' && { color: COLORS.primary },
+          tone === 'danger' && { color: COLORS.danger },
+        ]}
+      >
+        {value}
+      </Text>
+    </View>
   );
 }
 
@@ -676,15 +969,24 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   statusChip: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 999,
   },
   statusOpen: {
     backgroundColor: '#E0EBFF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  statusUpcoming: {
+    backgroundColor: '#FFF7E6',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
   },
   statusClosed: {
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
   },
   statusText: {
     fontFamily: 'Pretendard-SemiBold',
@@ -693,17 +995,44 @@ const styles = StyleSheet.create({
   statusTextOpen: {
     color: COLORS.primary,
   },
+  statusTextUpcoming: {
+    color: '#B45309',
+  },
   statusTextClosed: {
-    color: '#4B5563',
+    color: '#DC2626',
   },
   scheduleNote: {
     fontFamily: 'Pretendard-Medium',
     fontSize: 13,
     color: '#4B5563',
   },
+  scheduleTimelineRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  scheduleTimelineItem: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F9FAFB',
+    gap: 4,
+  },
+  scheduleTimelineLabel: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  scheduleTimelineValue: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 13,
+    color: COLORS.text,
+  },
   scheduleMetaRow: {
     flexDirection: 'row',
     gap: 12,
+    flexWrap: 'wrap',
   },
   metaItem: {
     flexDirection: 'row',
@@ -775,6 +1104,74 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#4B5563',
   },
+  detailTimelineRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  detailTimelineItem: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 4,
+  },
+  detailTimelineLabel: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  detailTimelineValue: {
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 13,
+    color: COLORS.text,
+  },
+  detailStatsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  detailStatCard: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 6,
+  },
+  detailStatLabel: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  detailStatValue: {
+    fontFamily: 'Pretendard-Bold',
+    fontSize: 18,
+    color: COLORS.text,
+  },
+  detailStateBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  detailStateText: {
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 13,
+    color: '#4B5563',
+    textAlign: 'center',
+  },
+  detailStateHelper: {
+    fontFamily: 'Pretendard-Regular',
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+  },
   applicantsSection: {
     gap: 10,
     padding: 12,
@@ -828,11 +1225,27 @@ const styles = StyleSheet.create({
     padding: 18,
     gap: 14,
     maxHeight: '90%',
+    width: '100%',
+  },
+  modalScroll: {
+    paddingBottom: 24,
+    gap: 16,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  modalHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalTitle: {
     fontFamily: 'Pretendard-Bold',

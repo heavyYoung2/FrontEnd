@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -12,10 +12,9 @@ import { useLocalSearchParams } from 'expo-router';
 import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '@/src/design/colors';
 import {
-  fetchLockersBySection,
-  fetchLockerSemesters,
-  LockerInfoApi,
-  LockerStatusApi,
+  fetchLockerAssignmentSemesters,
+  fetchLockerAssignments,
+  LockerAssignmentInfoApi,
 } from '@/src/api/locker';
 
 const SECTION_LIST = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'] as const;
@@ -29,36 +28,9 @@ type LockerItem = {
   label: string;
   section: SectionId;
   number: number;
-  status: LockerStatusApi;
+  status: 'IN_USE' | 'AVAILABLE';
   studentId?: string;
   studentName?: string;
-};
-
-const STATUS_THEME: Record<string, { bg: string; border: string; text: string; label: string }> = {
-  IN_USE: {
-    bg: '#FEE2E2',
-    border: '#FECACA',
-    text: COLORS.danger,
-    label: '사용중',
-  },
-  AVAILABLE: {
-    bg: '#DCFCE7',
-    border: '#A7F3D0',
-    text: '#15803D',
-    label: '사용 가능',
-  },
-  BROKEN: {
-    bg: '#E5E7EB',
-    border: '#D1D5DB',
-    text: '#374151',
-    label: '사용 불가',
-  },
-  MY: {
-    bg: '#DBEAFE',
-    border: '#BFDBFE',
-    text: COLORS.primary,
-    label: '내 사물함',
-  },
 };
 
 export default function LockerHistoryScreen() {
@@ -81,7 +53,7 @@ export default function LockerHistoryScreen() {
     (async () => {
       try {
         setSemesterLoading(true);
-        const list = await fetchLockerSemesters();
+        const list = await fetchLockerAssignmentSemesters();
         if (!mounted) return;
         setSemesters(list);
         setSelectedSemester(schedule ?? list[0] ?? null);
@@ -98,33 +70,33 @@ export default function LockerHistoryScreen() {
     };
   }, [schedule]);
 
-  const loadAssignments = useCallback(
-    async (semester?: string | null) => {
-      try {
-        setLoading(true);
-        setError(null);
-        const entries = await Promise.all(
-          SECTION_LIST.map(async (section) => {
-            const raw = await fetchLockersBySection(section, semester ? { semester } : undefined);
-            return [section, normalizeLockers(raw, section)] as const;
-          }),
-        );
-        setLockersBySection(Object.fromEntries(entries) as Record<SectionId, LockerItem[]>);
-      } catch (err: any) {
-        console.warn('[locker-history] fetch fail', err);
-        setError(err?.response?.data?.message || err?.message || '사물함 정보를 불러오지 못했습니다.');
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
+  const loadAssignments = useCallback(async (semester?: string | null) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const raw = await fetchLockerAssignments(semester ? { semester } : undefined);
+        setLockersBySection(normalizeAssignments(raw));
+    } catch (err: any) {
+      console.warn('[locker-history] fetch fail', err);
+      setError(err?.response?.data?.message || err?.message || '사물함 정보를 불러오지 못했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!semesterLoading) {
       loadAssignments(selectedSemester);
     }
   }, [loadAssignments, selectedSemester, semesterLoading]);
+
+  const flatList = useMemo(() => {
+    const entries = Object.values(lockersBySection).flat();
+    return entries.sort((a, b) => {
+      if (a.section === b.section) return a.number - b.number;
+      return a.section.localeCompare(b.section);
+    });
+  }, [lockersBySection]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -193,88 +165,87 @@ export default function LockerHistoryScreen() {
           </View>
         )}
 
-        {!loading &&
-          !error &&
-          SECTION_LIST.map((section) => {
-            const lockers = lockersBySection[section];
-            return (
-              <View key={section} style={styles.sectionCard}>
-                <Text style={styles.sectionTitle}>{section} 구역</Text>
-                <View style={styles.sectionLockers}>
-                  {lockers.map((locker) => {
-                    const theme = STATUS_THEME[locker.status.toUpperCase()] ?? STATUS_THEME.AVAILABLE;
-                    return (
-                      <View
-                        key={locker.id}
-                        style={[
-                          styles.lockerTile,
-                          {
-                            backgroundColor: theme.bg,
-                            borderColor: theme.border,
-                          },
-                        ]}
-                      >
-                        <Text style={[styles.lockerLabel, { color: theme.text }]}>{locker.label}</Text>
-                        <Text style={[styles.lockerStatus, { color: theme.text }]}>{theme.label}</Text>
-                        {locker.studentName ? (
-                          <View style={{ gap: 2 }}>
-                            <Text style={styles.lockerMeta}>{locker.studentName}</Text>
-                            {locker.studentId ? <Text style={styles.lockerMetaSecondary}>{locker.studentId}</Text> : null}
-                          </View>
-                        ) : (
-                          <Text style={styles.lockerMetaSecondary}>배정자 없음</Text>
-                        )}
-                      </View>
-                    );
-                  })}
-                  {!lockers.length && (
-                    <Text style={styles.emptyState}>사물함 내역이 없습니다.</Text>
-                  )}
+        {!loading && !error && (
+          <View style={styles.tableCard}>
+            <View style={styles.tableHeader}>
+              <Text style={[styles.tableHeaderText, { flex: 1 }]}>사물함</Text>
+              <Text style={[styles.tableHeaderText, { flex: 1 }]}>학번</Text>
+              <Text style={[styles.tableHeaderText, { flex: 1.5 }]}>이름</Text>
+              <Text style={[styles.tableHeaderText, { width: 70 }]}>상태</Text>
+            </View>
+            {flatList.length > 0 ? (
+              flatList.map((locker) => (
+                <View key={locker.id} style={styles.tableRow}>
+                  <Text style={[styles.tableCell, styles.tableLocker]}>{locker.label}</Text>
+                  <Text style={styles.tableCell}>{locker.studentId || '-'}</Text>
+                  <Text style={[styles.tableCell, { flex: 1.5 }]}>{locker.studentName || '배정자 없음'}</Text>
+                  <View style={styles.tableStatusCell}>
+                    <Text
+                      style={[
+                        styles.tableStatus,
+                        locker.status === 'IN_USE' ? styles.tableStatusInUse : styles.tableStatusAvailable,
+                      ]}
+                    >
+                      {locker.status === 'IN_USE' ? '사용중' : '사용 가능'}
+                    </Text>
+                  </View>
                 </View>
+              ))
+            ) : (
+              <View style={styles.tableEmptyRow}>
+                <Text style={styles.emptyState}>사물함 내역이 없습니다.</Text>
               </View>
-            );
-          })}
+            )}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function normalizeLockers(raw: LockerInfoApi[], section: SectionId): LockerItem[] {
-  return raw
-    .map((locker) => {
-      const sectionId = locker.location?.charAt(0);
-      if (!sectionId || !isSectionId(sectionId)) return null;
-      const number = parseInt(locker.location.slice(1), 10);
-      if (Number.isNaN(number)) return null;
-      const statusUpper = locker.status?.toUpperCase() ?? 'AVAILABLE';
+function normalizeAssignments(raw: LockerAssignmentInfoApi[]): Record<SectionId, LockerItem[]> {
+  const grouped: Record<SectionId, LockerItem[]> = SECTION_LIST.reduce((acc, section) => {
+    acc[section] = [];
+    return acc;
+  }, {} as Record<SectionId, LockerItem[]>);
 
-      const base: LockerItem = {
-        id: locker.id,
-        label: `${sectionId}-${number}`,
-        section: sectionId,
-        number,
-        status: (statusUpper as LockerStatusApi) ?? 'AVAILABLE',
-      };
+  raw.forEach((assignment) => {
+    const parsed = parseLockerLocation(assignment.lockerNumber);
+    if (!parsed) return;
+    const { section, number, label } = parsed;
+    const status = assignment.studentName ? 'IN_USE' : 'AVAILABLE';
+    grouped[section].push({
+      id: String(assignment.lockerId ?? `${label}`),
+      label,
+      number,
+      section,
+      status,
+      studentId: assignment.studentId,
+      studentName: assignment.studentName,
+    });
+  });
 
-      if (locker.owner) {
-        base.studentId = locker.owner.studentId;
-        base.studentName = locker.owner.name;
-      }
+  SECTION_LIST.forEach((section) => {
+    grouped[section].sort((a, b) => a.number - b.number);
+  });
 
-      if (statusUpper === 'BROKEN') {
-        base.status = 'BROKEN';
-      } else if (statusUpper === 'IN_USE') {
-        base.status = 'IN_USE';
-      } else if (statusUpper === 'MY') {
-        base.status = 'MY';
-      } else {
-        base.status = 'AVAILABLE';
-      }
+  return grouped;
+}
 
-      return base;
-    })
-    .filter((locker): locker is LockerItem => locker !== null)
-    .sort((a, b) => a.number - b.number);
+function parseLockerLocation(value?: string | number | null) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const sectionChar = raw.charAt(0).toUpperCase();
+  if (!isSectionId(sectionChar)) return null;
+  const numericPart = raw.slice(1).replace(/[^0-9]/g, '');
+  const number = parseInt(numericPart, 10);
+  if (Number.isNaN(number)) return null;
+  return {
+    section: sectionChar,
+    number,
+    label: `${sectionChar}-${number}`,
+  };
 }
 
 const styles = StyleSheet.create({
@@ -339,53 +310,73 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.text,
   },
-  sectionCard: {
+  tableCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    padding: 18,
-    gap: 14,
+    overflow: 'hidden',
   },
-  sectionTitle: {
-    fontFamily: 'Pretendard-Bold',
-    fontSize: 18,
-    color: COLORS.text,
-  },
-  sectionLockers: {
+  tableHeader: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  lockerTile: {
-    width: '48%',
-    borderRadius: 14,
-    borderWidth: 1,
     paddingVertical: 12,
-    paddingHorizontal: 10,
-    gap: 6,
+    paddingHorizontal: 16,
+    backgroundColor: '#F4F6FB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
-  lockerLabel: {
+  tableHeaderText: {
     fontFamily: 'Pretendard-SemiBold',
-    fontSize: 15,
+    fontSize: 13,
+    color: '#1F2937',
+    textAlign: 'center',
   },
-  lockerStatus: {
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  tableCell: {
+    flex: 1,
     fontFamily: 'Pretendard-Medium',
     fontSize: 13,
+    color: COLORS.text,
+    textAlign: 'center',
   },
-  lockerMeta: {
+  tableLocker: {
+    flex: 0.8,
+  },
+  tableStatusCell: {
+    width: 80,
+    alignItems: 'center',
+  },
+  tableStatus: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
     fontFamily: 'Pretendard-SemiBold',
     fontSize: 12,
-    color: '#475569',
+    textAlign: 'center',
   },
-  lockerMetaSecondary: {
-    fontFamily: 'Pretendard-Medium',
-    fontSize: 12,
-    color: '#6B7280',
+  tableStatusInUse: {
+    backgroundColor: '#FEE2E2',
+    color: COLORS.danger,
+  },
+  tableStatusAvailable: {
+    backgroundColor: '#DCFCE7',
+    color: '#15803D',
+  },
+  tableEmptyRow: {
+    paddingVertical: 40,
+    alignItems: 'center',
   },
   emptyState: {
     fontFamily: 'Pretendard-Medium',
     fontSize: 13,
     color: '#9CA3AF',
+    textAlign: 'center',
   },
 });

@@ -62,12 +62,12 @@ const TESTING = [
 
 export function GuideScreenTemplate({ badgeLabel }: { badgeLabel: string }) {
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safe} edges={['top'ㅌ₩, 'left', 'right']}>
       <CouncilHeader badgeLabel={badgeLabel} studentId="C246120" title="회비영 안내" showBack />
 
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.heading1}># 회비영</Text>
-
+        <Text style={styles.heading1}>회비영</Text>
+        
         <Section title="📌 프로젝트 개요">
           <Paragraph>
             홍익대학교 컴퓨터공학과 학생들을 위한 통합 관리 플랫폼입니다. 기존에는 학생회비 납부 확인과 각종 서비스를 모두 수기로 처리해 비효율적이고 불필요한 노동이 발생했습니다. 회비영은 디지털 전환을 통해 운영 과정을 투명하고 효율적으로 개선하고, 학생들이 납부한 회비를 보다 편리하고 활발하게 활용할 수 있도록 하는 것을 목표로 합니다.

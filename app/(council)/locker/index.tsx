@@ -15,7 +15,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '@/src/design/colors';
-import { fetchLockersBySection, LockerInfoApi, LockerStatusApi } from '@/src/api/locker';
+import {
+  fetchLockersBySection,
+  LockerInfoApi,
+  LockerStatusApi,
+  returnCurrentSemesterLockers,
+} from '@/src/api/locker';
 
 const SECTION_LIST = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'] as const;
 type SectionId = (typeof SECTION_LIST)[number];
@@ -89,6 +94,7 @@ export default function LockerTab() {
   const [selectedSection, setSelectedSection] = useState<SectionId>('A');
   const [modalVisible, setModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [bulkReturning, setBulkReturning] = useState(false);
 
   const summaries = useMemo(() => {
     return SECTION_LIST.map((section) => {
@@ -168,23 +174,32 @@ export default function LockerTab() {
         {
           text: '확인',
           style: 'destructive',
-          onPress: () => {
-            setSectionStates((prev) => {
-              const next = { ...prev };
-              SECTION_LIST.forEach((section) => {
-                const state = next[section];
-                if (state.status === 'loaded') {
-                  const updated = state.lockers.map((locker) =>
-                    locker.status.toUpperCase() === 'IN_USE' || locker.status.toUpperCase() === 'MY'
-                      ? { ...locker, status: 'AVAILABLE', studentId: undefined, studentName: undefined }
-                      : locker,
-                  );
-                  next[section] = { status: 'loaded', lockers: updated, counts: summarizeLockers(updated) };
-                }
+          onPress: async () => {
+            try {
+              setBulkReturning(true);
+              await returnCurrentSemesterLockers();
+              setSectionStates((prev) => {
+                const next = { ...prev };
+                SECTION_LIST.forEach((section) => {
+                  const state = next[section];
+                  if (state.status === 'loaded') {
+                    const updated = state.lockers.map((locker) =>
+                      locker.status.toUpperCase() === 'IN_USE' || locker.status.toUpperCase() === 'MY'
+                        ? { ...locker, status: 'AVAILABLE', studentId: undefined, studentName: undefined }
+                        : locker,
+                    );
+                    next[section] = { status: 'loaded', lockers: updated, counts: summarizeLockers(updated) };
+                  }
+                });
+                return next;
               });
-              return next;
-            });
-            Alert.alert('완료', '반납 처리가 완료되었습니다.');
+              Alert.alert('완료', '반납 처리가 완료되었습니다.');
+            } catch (error: any) {
+              console.warn('[locker] bulk return fail', error);
+              Alert.alert('오류', error?.response?.data?.message || error?.message || '일괄 반납에 실패했습니다.');
+            } finally {
+              setBulkReturning(false);
+            }
           },
         },
       ],
@@ -288,9 +303,23 @@ export default function LockerTab() {
           ))}
         </View>
 
-        <Pressable onPress={onBulkReturn} style={({ pressed }) => [styles.bulkButton, pressed && styles.bulkPressed]}>
-          <Ionicons name="refresh-circle" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-          <Text style={styles.bulkText}>현재 학기 사물함 일괄 반납하기</Text>
+        <Pressable
+          onPress={onBulkReturn}
+          disabled={bulkReturning}
+          style={({ pressed }) => [
+            styles.bulkButton,
+            pressed && styles.bulkPressed,
+            bulkReturning && styles.bulkButtonDisabled,
+          ]}
+        >
+          {bulkReturning ? (
+            <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 8 }} />
+          ) : (
+            <Ionicons name="refresh-circle" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+          )}
+          <Text style={styles.bulkText}>
+            {bulkReturning ? '반납 처리 중...' : '현재 학기 사물함 일괄 반납하기'}
+          </Text>
         </Pressable>
       </ScrollView>
 
@@ -397,26 +426,41 @@ function LockerSectionModal({
   );
 }
 
-function normalizeLockers(raw: LockerInfoApi[], section: SectionId): LockerItem[] {
+function normalizeLockers(raw: LockerInfoApi[], _section: SectionId): LockerItem[] {
   return raw
     .map((item) => {
-      const sectionId = item.location?.charAt(0);
-      if (!sectionId || !isSectionId(sectionId)) return null;
-      const number = parseInt(item.location.slice(1), 10);
+      const locationSource =
+        item.location ||
+        item.lockerNumber ||
+        item.lockerNum ||
+        item.lockerName ||
+        item.sectionName ||
+        (item.lockerSection ? `${item.lockerSection}${item.lockerNumber ?? item.lockerNo ?? item.lockerId ?? ''}` : null);
+      if (!locationSource) return null;
+      const normalizedLocation = String(locationSource);
+      const sectionId = normalizedLocation.charAt(0).toUpperCase();
+      if (!isSectionId(sectionId)) return null;
+      const number = parseInt(normalizedLocation.slice(1), 10);
       if (Number.isNaN(number)) return null;
-      const statusUpper = item.status?.toUpperCase() ?? 'AVAILABLE';
+      const statusUpper = (item.lockerStatus ?? item.status ?? 'AVAILABLE').toUpperCase();
 
       const base: LockerItem = {
-        id: item.id,
+        id: String(item.lockerId ?? item.id ?? `${sectionId}-${number}`),
         label: `${sectionId}-${number}`,
         number,
         section: sectionId,
         status: (statusUpper as LockerStatusApi) ?? 'AVAILABLE',
       };
 
+      const ownerId =
+        item.studentId || item.memberId || item.memberNumber || item.studentNumber || item.memberId || undefined;
+      const ownerName = item.studentName || item.memberName || item.name || undefined;
+      if (ownerId) base.studentId = ownerId;
+      if (ownerName) base.studentName = ownerName;
+
       if (item.owner) {
-        base.studentId = item.owner.studentId;
-        base.studentName = item.owner.name;
+        base.studentId = item.owner.studentId ?? base.studentId;
+        base.studentName = item.owner.name ?? base.studentName;
       }
 
       if (statusUpper === 'BROKEN') {
@@ -587,6 +631,9 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     elevation: 3,
+  },
+  bulkButtonDisabled: {
+    backgroundColor: '#94A3B8',
   },
   bulkPressed: {
     opacity: 0.9,

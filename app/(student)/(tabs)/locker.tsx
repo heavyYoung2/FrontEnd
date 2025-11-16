@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   RefreshControl,
@@ -12,7 +13,11 @@ import {
 import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '../../../src/design/colors';
 import {
+  applyLocker,
+  fetchLockersBySection,
   fetchMyLocker,
+  LockerInfoApi,
+  LockerStatusApi,
   MyLockerInfoApi,
 } from '@/src/api/locker';
 
@@ -21,14 +26,22 @@ type SectionKey = (typeof SECTION_KEYS)[number];
 
 type LockerStatus = 'mine' | 'inUse' | 'available' | 'pending' | 'broken';
 
-type LockerInfo = {
+type LockerCell = {
   id: string;
+  label: string;
   status: LockerStatus;
 };
 
-type SectionInfo = {
-  key: SectionKey;
-  lockers: LockerInfo[];
+type SectionState = {
+  status: 'idle' | 'loading' | 'loaded' | 'error';
+  lockers: LockerCell[];
+  counts: {
+    mine: number;
+    inUse: number;
+    available: number;
+    broken: number;
+  };
+  error?: string | null;
 };
 
 const STATUS_THEME: Record<LockerStatus, { bg: string; border: string; text: string; label: string }> = {
@@ -64,39 +77,124 @@ const STATUS_THEME: Record<LockerStatus, { bg: string; border: string; text: str
   },
 };
 
-function createMockSections(): SectionInfo[] {
-  return SECTION_KEYS.map((key) => {
-    return {
-      key,
-      lockers: Array.from({ length: 30 }).map((_, lockerIdx) => {
-        const status: LockerStatus = lockerIdx % 6 === 0 ? 'available' : lockerIdx % 7 === 0 ? 'broken' : 'inUse';
-        return {
-          id: `${key}${lockerIdx + 1}`,
-          status,
-        } satisfies LockerInfo;
-      }),
-    } satisfies SectionInfo;
-  });
+const createEmptySectionState = (): SectionState => ({
+  status: 'idle',
+  lockers: [],
+  counts: { mine: 0, inUse: 0, available: 0, broken: 0 },
+});
+
+const buildInitialSectionStates = () =>
+  SECTION_KEYS.reduce((acc, key) => {
+    acc[key] = createEmptySectionState();
+    return acc;
+  }, {} as Record<SectionKey, SectionState>);
+
+const SECTION_STATE_FALLBACK: SectionState = {
+  status: 'idle',
+  lockers: [],
+  counts: { mine: 0, inUse: 0, available: 0, broken: 0 },
+};
+
+const mapApiLockerStatus = (value?: LockerStatusApi | string | null): LockerStatus => {
+  const normalized = (value ?? '').toUpperCase();
+  if (normalized === 'MY') return 'mine';
+  if (normalized === 'IN_USE') return 'inUse';
+  if (normalized === 'BROKEN') return 'broken';
+  return 'available';
+};
+
+function parseLockerLocation(value?: string | number | null) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const sectionChar = raw.charAt(0).toUpperCase();
+  if (!SECTION_KEYS.includes(sectionChar as SectionKey)) return null;
+  const numericPart = raw.slice(1).replace(/[^0-9]/g, '');
+  const number = parseInt(numericPart, 10);
+  if (Number.isNaN(number)) return null;
+  return {
+    section: sectionChar as SectionKey,
+    number,
+  };
 }
 
-function markMyLocker(base: SectionInfo[], locker: MyLockerInfoApi | null) {
-  if (!locker || locker.status !== 'RENTING') return base;
-  const sectionKey = (locker.lockerSection ?? '').toUpperCase();
-  if (!SECTION_KEYS.includes(sectionKey as SectionKey)) return base;
-  const numeric = locker.lockerNumber
-    ?? locker.lockerName?.replace(/^[A-Za-z]+/, '')
-    ?? '';
-  if (!numeric) return base;
+function getMyLockerTarget(myLocker: MyLockerInfoApi | null) {
+  if (!myLocker) return null;
+  const status = (myLocker.lockerRentalStatus ?? myLocker.status)?.toUpperCase();
+  if (status !== 'RENTING') return null;
+  const parsed = parseLockerLocation(myLocker.lockerNumber ?? myLocker.lockerName);
+  if (parsed) {
+    return { section: parsed.section, number: parsed.number };
+  }
+  if (myLocker.lockerSection) {
+    const sectionChar = myLocker.lockerSection.toUpperCase();
+    if (SECTION_KEYS.includes(sectionChar as SectionKey)) {
+      const numeric = parseInt(String(myLocker.lockerNumber ?? myLocker.lockerName ?? '').replace(/[^0-9]/g, ''), 10);
+      if (!Number.isNaN(numeric)) {
+        return { section: sectionChar as SectionKey, number: numeric };
+      }
+    }
+  }
+  return null;
+}
 
-  return base.map((section) => {
-    if (section.key !== sectionKey) return section;
-    return {
-      ...section,
-      lockers: section.lockers.map((item) =>
-        item.id === `${sectionKey}${numeric}` ? { ...item, status: 'mine' } : item,
-      ),
-    };
-  });
+function normalizeSectionLockers(raw: LockerInfoApi[], myLockerInfo?: MyLockerInfoApi | null) {
+  const target = getMyLockerTarget(myLockerInfo ?? null);
+  const counts = { mine: 0, inUse: 0, available: 0, broken: 0 };
+
+  const lockers = raw
+    .map((item) => {
+      const locationSource =
+        item.lockerName ||
+        item.lockerNumber ||
+        item.lockerNum ||
+        item.lockerNo ||
+        item.sectionName ||
+        (item.lockerSection
+          ? `${item.lockerSection}${item.lockerNumber ?? item.lockerNum ?? item.lockerNo ?? item.lockerId ?? ''}`
+          : null);
+
+      let parsed = parseLockerLocation(locationSource);
+      if (!parsed && item.lockerSection) {
+        const numericSource = item.lockerNumber ?? item.lockerNum ?? item.lockerNo ?? item.lockerId ?? null;
+        const numeric = numericSource ? parseInt(String(numericSource).replace(/[^0-9]/g, ''), 10) : NaN;
+        if (!Number.isNaN(numeric)) {
+          const sectionChar = item.lockerSection.trim().charAt(0).toUpperCase();
+          if (SECTION_KEYS.includes(sectionChar as SectionKey)) {
+            parsed = { section: sectionChar as SectionKey, number: numeric };
+          }
+        }
+      }
+
+      if (!parsed) return null;
+      return {
+        id: String(item.lockerId ?? `${parsed.section}-${parsed.number}`),
+        section: parsed.section,
+        number: parsed.number,
+        status: mapApiLockerStatus(item.lockerStatus),
+      };
+    })
+    .filter((item): item is { id: string; section: SectionKey; number: number; status: LockerStatus } => item !== null)
+    .sort((a, b) => a.number - b.number)
+    .map((locker) => {
+      let status = locker.status;
+      if (target && locker.section === target.section && locker.number === target.number) {
+        status = 'mine';
+      }
+
+      if (status === 'mine') counts.mine += 1;
+      else if (status === 'inUse') counts.inUse += 1;
+      else if (status === 'broken') counts.broken += 1;
+      else counts.available += 1;
+
+      return {
+        id: locker.id,
+        label: `${locker.section}${locker.number}`,
+        status,
+      };
+    });
+
+  return { lockers, counts };
 }
 
 function mapStatus(apiStatus: string | undefined): LockerStatus {
@@ -114,62 +212,132 @@ export default function StudentLockerScreen() {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 16);
   const [selectedSection, setSelectedSection] = useState<SectionKey>('A');
-  const [sections, setSections] = useState<SectionInfo[]>(createMockSections());
+  const [sectionStates, setSectionStates] = useState<Record<SectionKey, SectionState>>(() =>
+    buildInitialSectionStates(),
+  );
   const [myLocker, setMyLocker] = useState<MyLockerInfoApi | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const selectedSectionRef = useRef<SectionKey>('A');
+  const myLockerRef = useRef<MyLockerInfoApi | null>(null);
+
+  useEffect(() => {
+    selectedSectionRef.current = selectedSection;
+  }, [selectedSection]);
+
+  useEffect(() => {
+    myLockerRef.current = myLocker;
+  }, [myLocker]);
 
   const statusChips = useMemo(() => (
-    (['mine', 'inUse', 'available', 'pending', 'broken'] as LockerStatus[]).map((key) => ({
+    (['mine', 'inUse', 'available', 'broken'] as LockerStatus[]).map((key) => ({
       key,
       theme: STATUS_THEME[key],
     }))
   ), []);
 
+  const loadSection = useCallback(async (section: SectionKey, lockerOverride?: MyLockerInfoApi | null) => {
+    setSectionStates((prev) => ({
+      ...prev,
+      [section]: { ...prev[section], status: 'loading', error: null },
+    }));
+    try {
+      const raw = await fetchLockersBySection(section);
+      const normalized = normalizeSectionLockers(raw, lockerOverride ?? myLockerRef.current);
+      setSectionStates((prev) => ({
+        ...prev,
+        [section]: {
+          status: 'loaded',
+          lockers: normalized.lockers,
+          counts: normalized.counts,
+          error: null,
+        },
+      }));
+    } catch (e: any) {
+      setSectionStates((prev) => ({
+        ...prev,
+        [section]: {
+          ...prev[section],
+          status: 'error',
+          error: e?.response?.data?.message || e?.message || '사물함 정보를 불러오지 못했습니다.',
+        },
+      }));
+    }
+  }, []);
+
   const loadLocker = useCallback(async () => {
     try {
-      setLoading(true);
       setError(null);
       const myInfo = await fetchMyLocker();
       setMyLocker(myInfo);
 
-      const marked = markMyLocker(createMockSections(), myInfo);
-      setSections(marked);
+      const nextSection = (() => {
+        const parsed = parseLockerLocation(myInfo?.lockerNumber ?? myInfo?.lockerName);
+        if (parsed) return parsed.section;
+        const candidate = myInfo?.lockerSection?.toUpperCase();
+        if (candidate && SECTION_KEYS.includes(candidate as SectionKey)) {
+          return candidate as SectionKey;
+        }
+        return selectedSectionRef.current;
+      })();
 
-      if (myInfo?.lockerSection && SECTION_KEYS.includes(myInfo.lockerSection as SectionKey)) {
-        setSelectedSection(myInfo.lockerSection as SectionKey);
-      }
+      setSelectedSection(nextSection);
+      await loadSection(nextSection, myInfo);
     } catch (e: any) {
       setError(e?.response?.data?.message || e?.message || '사물함 정보를 불러오지 못했습니다.');
-      setSections(createMockSections());
-    } finally {
-      setLoading(false);
+      await loadSection(selectedSectionRef.current);
     }
-  }, []);
+  }, [loadSection]);
 
   useEffect(() => {
     loadLocker();
   }, [loadLocker]);
 
-  const selectedSectionInfo = useMemo(() => {
-    return sections.find((section) => section.key === selectedSection) ?? sections[0];
-  }, [sections, selectedSection]);
+  const sectionSummaries = useMemo(
+    () =>
+      SECTION_KEYS.map((key) => {
+        const state = sectionStates[key] ?? SECTION_STATE_FALLBACK;
+        return {
+          section: key,
+          counts: state.counts,
+          status: state.status,
+          error: state.error,
+        };
+      }),
+    [sectionStates],
+  );
 
-  const myLockerLabel = useMemo(() => {
-    if (!myLocker) return '-';
-    if (myLocker.lockerSection) {
-      const number = myLocker.lockerNumber
-        ?? myLocker.lockerName?.replace(/^[A-Za-z]+/, '')
-        ?? '';
-      return `${myLocker.lockerSection}${number}`;
+  const selectedState = sectionStates[selectedSection] ?? SECTION_STATE_FALLBACK;
+
+  const handleSelectSection = (key: SectionKey) => {
+    setSelectedSection(key);
+    const state = sectionStates[key];
+    if (!state || state.status === 'idle' || state.status === 'error') {
+      loadSection(key);
     }
-    return myLocker.lockerName ?? myLocker.lockerNumber ?? '-';
-  }, [myLocker]);
+  };
 
-  const myStatus = mapStatus(myLocker?.status);
-  const canApply = myLocker?.status !== 'RENTING' && myLocker?.status !== 'RENTAL_REQUESTED';
-  const applyHelperText = myLocker?.status === 'RENTING'
+  const submitLockerApplication = useCallback(async () => {
+    try {
+      setApplying(true);
+      await applyLocker();
+      Alert.alert('신청 완료', '사물함 신청이 접수되었습니다. 결과는 알림으로 안내됩니다.');
+      await loadLocker();
+    } catch (e: any) {
+      console.warn('[student-locker] apply fail', e);
+      Alert.alert('신청 실패', e?.response?.data?.message || e?.message || '사물함 신청에 실패했습니다.');
+    } finally {
+      setApplying(false);
+    }
+  }, [loadLocker]);
+
+  const myLockerLabel = useMemo(() => myLocker?.lockerNumber ?? myLocker?.lockerName ?? '-', [myLocker]);
+
+  const rawMyLockerStatus = (myLocker?.lockerRentalStatus ?? myLocker?.status)?.toUpperCase();
+  const myStatus = mapStatus(rawMyLockerStatus);
+  const canApply = rawMyLockerStatus !== 'RENTING' && rawMyLockerStatus !== 'RENTAL_REQUESTED';
+  const applyHelperText = rawMyLockerStatus === 'RENTING'
     ? '이미 사물함을 사용 중입니다.'
     : '현재 사물함 신청이 처리 중입니다.';
 
@@ -179,17 +347,22 @@ export default function StudentLockerScreen() {
       return;
     }
 
+    if (applying) {
+      Alert.alert('처리중', '이전 신청 요청을 처리하고 있습니다.');
+      return;
+    }
+
     Alert.alert(
       '사물함 신청',
       '다음 정보로 사물함을 신청하시겠습니까? 신청 이후 배정 시 결과를 안내드립니다.',
       [
         { text: '취소', style: 'cancel' },
-        { text: '확인', onPress: () => Alert.alert('신청 완료', '사물함 신청이 접수되었습니다. 결과는 알림으로 안내됩니다.') },
+        { text: '확인', onPress: submitLockerApplication },
       ],
     );
   };
 
-  const handleLockerLongPress = (locker: LockerInfo) => {
+  const handleLockerLongPress = (locker: LockerCell) => {
     if (!canApply) {
       Alert.alert('신청 불가', applyHelperText);
       return;
@@ -200,9 +373,14 @@ export default function StudentLockerScreen() {
       return;
     }
 
-    Alert.alert('사물함 신청', `${locker.id} 사물함을 신청하시겠습니까?`, [
+    if (applying) {
+      Alert.alert('처리중', '이전 신청 요청을 처리하고 있습니다.');
+      return;
+    }
+
+    Alert.alert('사물함 신청', `${locker.label} 사물함을 신청하시겠습니까?`, [
       { text: '취소', style: 'cancel' },
-      { text: '확인', onPress: handleApply },
+      { text: '확인', onPress: submitLockerApplication },
     ]);
   };
 
@@ -242,19 +420,26 @@ export default function StudentLockerScreen() {
             <Text style={styles.sectionLabel}>나의 사물함</Text>
             <Pressable
               onPress={handleApply}
+              disabled={!canApply || applying}
               style={({ pressed }) => [
                 styles.applyButton,
-                !canApply && styles.applyButtonDisabled,
-                pressed && canApply && { opacity: 0.9 },
+                (!canApply || applying) && styles.applyButtonDisabled,
+                pressed && canApply && !applying && { opacity: 0.9 },
               ]}
             >
               <Text
                 style={[
                   styles.applyButtonText,
-                  !canApply && { color: '#94A3B8' },
+                  (!canApply || applying) && { color: '#94A3B8' },
                 ]}
               >
-                {canApply ? '사물함 신청하기' : myLocker?.status === 'RENTAL_REQUESTED' ? '신청 처리중' : '대여중'}
+                {applying
+                  ? '신청 중...'
+                  : canApply
+                    ? '사물함 신청하기'
+                    : rawMyLockerStatus === 'RENTAL_REQUESTED'
+                      ? '신청 처리중'
+                      : '대여중'}
               </Text>
             </Pressable>
           </View>
@@ -270,18 +455,18 @@ export default function StudentLockerScreen() {
           >
             <Text style={[styles.myLockerId, { color: STATUS_THEME[myStatus].text }]}>{myLockerLabel}</Text>
             <Text style={[styles.myLockerStatus, { color: STATUS_THEME[myStatus].text }]}>
-              {myLocker?.status === 'RENTING'
+              {rawMyLockerStatus === 'RENTING'
                 ? '대여중'
-                : myLocker?.status === 'RENTAL_REQUESTED'
+                : rawMyLockerStatus === 'RENTAL_REQUESTED'
                   ? '대여 신청 접수'
                   : '신청 가능'}
             </Text>
           </View>
 
           <Text style={styles.myLockerNote}>
-            {myLocker?.status === 'RENTING'
+            {rawMyLockerStatus === 'RENTING'
               ? '현재 사용 중인 사물함입니다. 이용 규칙을 꼭 지켜주세요.'
-              : myLocker?.status === 'RENTAL_REQUESTED'
+              : rawMyLockerStatus === 'RENTAL_REQUESTED'
                 ? '신청이 접수되어 배정 순서를 기다리고 있습니다.'
                 : '아직 배정받은 사물함이 없습니다. 원하는 구역을 확인해 신청해 보세요.'}
           </Text>
@@ -299,17 +484,56 @@ export default function StudentLockerScreen() {
         </View>
 
         <View style={styles.sectionGrid}>
-          {SECTION_KEYS.map((key) => (
+          {sectionSummaries.map(({ section, counts, status, error: sectionError }) => (
             <Pressable
-              key={key}
-              onPress={() => setSelectedSection(key)}
+              key={section}
+              onPress={() => handleSelectSection(section)}
               style={({ pressed }) => [
-                styles.sectionTile,
-                selectedSection === key && styles.sectionTileActive,
-                pressed && { opacity: 0.9 },
+                styles.sectionCard,
+                selectedSection === section && styles.sectionCardActive,
+                pressed && styles.sectionCardPressed,
               ]}
             >
-              <Text style={[styles.sectionTileText, selectedSection === key && styles.sectionTileTextActive]}>{key}</Text>
+              <View style={styles.sectionCardHeader}>
+                <Text style={styles.sectionName}>{section} 구역</Text>
+                <Text style={styles.sectionTotal}>
+                  {status === 'loaded'
+                    ? `${counts.mine + counts.inUse + counts.available + counts.broken}칸`
+                    : status === 'loading'
+                      ? '불러오는 중'
+                      : '미확인'}
+                </Text>
+              </View>
+
+              <View style={styles.sectionStats}>
+                <Text style={[styles.sectionStat, { color: STATUS_THEME.inUse.text }]}>
+                  사용중 {counts.inUse}
+                </Text>
+                <Text style={[styles.sectionStat, { color: STATUS_THEME.available.text }]}>
+                  신청 가능 {counts.available}
+                </Text>
+                <Text style={[styles.sectionStat, { color: STATUS_THEME.broken.text }]}>
+                  사용 불가 {counts.broken}
+                </Text>
+                {counts.mine > 0 && (
+                  <Text style={[styles.sectionStat, { color: STATUS_THEME.mine.text }]}>
+                    내 사물함 {counts.mine}
+                  </Text>
+                )}
+
+                {status === 'loading' && (
+                  <View style={styles.sectionLoadingRow}>
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                    <Text style={styles.sectionLoadingText}>불러오는 중...</Text>
+                  </View>
+                )}
+
+                {status === 'error' && (
+                  <Text style={[styles.sectionLoadingText, { color: COLORS.danger }]}>
+                    {sectionError || '오류가 발생했습니다.'}
+                  </Text>
+                )}
+              </View>
             </Pressable>
           ))}
         </View>
@@ -321,31 +545,50 @@ export default function StudentLockerScreen() {
           </Text>
         </View>
 
-        <View style={styles.lockersGrid}>
-          {selectedSectionInfo.lockers.map((locker) => {
-            const theme = STATUS_THEME[locker.status];
-            const isMine = locker.status === 'mine';
-            return (
-              <Pressable
-                key={locker.id}
-                onLongPress={() => handleLockerLongPress(locker)}
-                disabled={!canApply && locker.status === 'available'}
-                style={({ pressed }) => [
-                  styles.lockerTile,
-                  { backgroundColor: theme.bg, borderColor: theme.border },
-                  isMine && styles.lockerTileMine,
-                  pressed && { transform: [{ scale: 0.97 }] },
-                ]}
-              >
-                <Text style={[styles.lockerLabel, { color: theme.text }]}>{locker.id}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        {selectedState.status === 'loaded' && selectedState.lockers.length > 0 && (
+          <View style={styles.lockersGrid}>
+            {selectedState.lockers.map((locker) => {
+              const theme = STATUS_THEME[locker.status];
+              const isMine = locker.status === 'mine';
+              return (
+                <Pressable
+                  key={locker.id}
+                  onLongPress={() => handleLockerLongPress(locker)}
+                  disabled={(!canApply && locker.status === 'available') || applying}
+                  style={({ pressed }) => [
+                    styles.lockerTile,
+                    { backgroundColor: theme.bg, borderColor: theme.border },
+                    isMine && styles.lockerTileMine,
+                    pressed && { transform: [{ scale: 0.97 }] },
+                  ]}
+                >
+                  <Text style={[styles.lockerLabel, { color: theme.text }]}>{locker.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
 
-        {loading && (
+        {selectedState.status === 'loaded' && selectedState.lockers.length === 0 && (
+          <View style={styles.loadingHint}>
+            <Text style={styles.loadingText}>선택한 구역의 사물함 정보가 없습니다.</Text>
+          </View>
+        )}
+
+        {selectedState.status !== 'loaded' && selectedState.status !== 'error' && (
           <View style={styles.loadingHint}>
             <Text style={styles.loadingText}>사물함 정보를 불러오는 중입니다...</Text>
+          </View>
+        )}
+
+        {selectedState.status === 'error' && (
+          <View style={styles.sectionError}>
+            <Text style={[styles.loadingText, { color: COLORS.danger }]}>
+              {selectedState.error || '사물함 정보를 불러오는 중 오류가 발생했습니다.'}
+            </Text>
+            <Pressable onPress={() => loadSection(selectedSection)} style={styles.reloadSectionBtn}>
+              <Text style={styles.reloadSectionText}>다시 시도</Text>
+            </Pressable>
           </View>
         )}
       </ScrollView>
@@ -437,10 +680,10 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   legendCard: {
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surface,
+    borderColor: '#E2E6F2',
+    backgroundColor: '#FFFFFF',
     padding: 18,
     gap: 12,
   },
@@ -452,52 +695,76 @@ const styles = StyleSheet.create({
   legendRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
   },
   legendChip: {
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
     borderWidth: 1,
-    minWidth: 92,
     alignItems: 'center',
   },
   legendText: {
-    fontFamily: 'Pretendard-Medium',
-    fontSize: 12,
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 13,
   },
   sectionGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 12,
   },
-  sectionTile: {
-    width: '30%',
-    minWidth: 90,
-    aspectRatio: 1,
+  sectionCard: {
+    width: '48%',
     borderRadius: 18,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#E7EAF2',
+    gap: 12,
   },
-  sectionTileActive: {
-    backgroundColor: '#EEF2FF',
+  sectionCardActive: {
     borderColor: COLORS.primary,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2,
+    shadowColor: COLORS.primary,
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
   },
-  sectionTileText: {
-    fontFamily: 'Pretendard-Bold',
-    fontSize: 20,
-    color: '#475569',
+  sectionCardPressed: {
+    opacity: 0.9,
   },
-  sectionTileTextActive: {
-    color: COLORS.primary,
+  sectionCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionName: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 15,
+    color: COLORS.text,
+  },
+  sectionTotal: {
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  sectionStats: {
+    gap: 6,
+  },
+  sectionStat: {
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 12,
+  },
+  sectionLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  sectionLoadingText: {
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 12,
+    color: '#6B7280',
   },
   sectionHeaderRow: {
     flexDirection: 'column',
@@ -536,6 +803,26 @@ const styles = StyleSheet.create({
   lockerLabel: {
     fontFamily: 'Pretendard-SemiBold',
     fontSize: 12,
+  },
+  sectionError: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEF2F2',
+    padding: 16,
+    gap: 10,
+    alignItems: 'center',
+  },
+  reloadSectionBtn: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: COLORS.primary,
+  },
+  reloadSectionText: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 13,
+    color: '#FFFFFF',
   },
   loadingHint: {
     paddingVertical: 12,

@@ -16,13 +16,9 @@ import { COLORS } from '@/src/design/colors';
 import { TYPO } from '@/src/design/typography';
 import { ActiveRental, useMyActiveRentals } from './rental/hooks';
 import { fetchMemberBlacklist, MemberBlacklistInfo } from '@/src/api/member';
+import { fetchMyLocker, MyLockerInfoApi } from '@/src/api/locker';
 import { generateStudentFeeQrToken, StudentFeeStatus } from '@/src/api/studentFee';
-
-const lockerInfo = {
-  number: 'A12번',
-  statusLabel: '대여중',
-  assignedAt: '2025-07-01',
-};
+import { toYMD } from '@/src/utils/date';
 
 const RENTAL_STATUS_BADGE: Record<
   ActiveRental['status'],
@@ -32,6 +28,16 @@ const RENTAL_STATUS_BADGE: Record<
   OVERDUE: { label: '연체', background: 'rgba(239, 68, 68, 0.12)', color: COLORS.danger },
 };
 
+const LOCKER_STATUS_BADGE: Record<
+  'RENTING' | 'RENTAL_REQUESTED' | 'NO_RENTAL' | 'UNKNOWN',
+  { label: string; background: string; color: string }
+> = {
+  RENTING: { label: '대여중', background: '#EEF2FF', color: COLORS.primary },
+  RENTAL_REQUESTED: { label: '신청 처리중', background: '#FEF9C3', color: '#B45309' },
+  NO_RENTAL: { label: '신청 가능', background: '#DCFCE7', color: '#15803D' },
+  UNKNOWN: { label: '확인 필요', background: '#E5E7EB', color: '#4B5563' },
+};
+
 export default function StudentMyPageScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -39,6 +45,9 @@ export default function StudentMyPageScreen() {
   const { rentals, isLoading: rentalsLoading, error: rentalsError, refetch } = useMyActiveRentals();
 
   const hasRentals = rentals.length > 0;
+  const [myLocker, setMyLocker] = useState<MyLockerInfoApi | null>(null);
+  const [lockerLoading, setLockerLoading] = useState(true);
+  const [lockerError, setLockerError] = useState<string | null>(null);
   const [blacklist, setBlacklist] = useState<MemberBlacklistInfo | null>(null);
   const [blacklistLoading, setBlacklistLoading] = useState(true);
   const [blacklistError, setBlacklistError] = useState<Error | null>(null);
@@ -46,6 +55,20 @@ export default function StudentMyPageScreen() {
   const [feeStatusLoading, setFeeStatusLoading] = useState(true);
   const [feeStatusCheckedAt, setFeeStatusCheckedAt] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  const loadMyLocker = useCallback(async () => {
+    setLockerLoading(true);
+    setLockerError(null);
+    try {
+      const data = await fetchMyLocker();
+      setMyLocker(data);
+    } catch (err: any) {
+      console.warn('[student mypage] locker fetch failed', err);
+      setLockerError(err?.response?.data?.message || err?.message || '사물함 정보를 불러오지 못했습니다.');
+    } finally {
+      setLockerLoading(false);
+    }
+  }, []);
 
   const loadBlacklist = useCallback(async () => {
     setBlacklistLoading(true);
@@ -75,20 +98,21 @@ export default function StudentMyPageScreen() {
   }, []);
 
   useEffect(() => {
+    loadMyLocker();
     loadBlacklist();
     loadStudentFeeStatus();
-  }, [loadBlacklist, loadStudentFeeStatus]);
+  }, [loadBlacklist, loadMyLocker, loadStudentFeeStatus]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.all([refetch(), loadBlacklist(), loadStudentFeeStatus()]);
+      await Promise.all([refetch(), loadMyLocker(), loadBlacklist(), loadStudentFeeStatus()]);
     } catch (err) {
       console.warn('[student mypage] refresh failed', err);
     } finally {
       setRefreshing(false);
     }
-  }, [loadBlacklist, loadStudentFeeStatus, refetch]);
+  }, [loadBlacklist, loadMyLocker, loadStudentFeeStatus, refetch]);
 
   const blacklistView = useMemo(() => {
     if (blacklistLoading) {
@@ -105,6 +129,27 @@ export default function StudentMyPageScreen() {
       type: 'blacklisted' as const,
     };
   }, [blacklist, blacklistError, blacklistLoading]);
+
+  const lockerStatusCode = (myLocker?.lockerRentalStatus ?? myLocker?.status ?? 'NO_RENTAL').toUpperCase() as
+    | 'RENTING'
+    | 'RENTAL_REQUESTED'
+    | 'NO_RENTAL'
+    | 'UNKNOWN';
+  const lockerBadge = LOCKER_STATUS_BADGE[lockerStatusCode] ?? LOCKER_STATUS_BADGE.UNKNOWN;
+  const lockerMetaText = useMemo(() => {
+    if (lockerStatusCode === 'RENTING') {
+      if (myLocker?.assignedAt) {
+        const assigned = toYMD(myLocker.assignedAt) ?? myLocker.assignedAt;
+        return `배정일 : ${assigned}`;
+      }
+      return '현재 사용 중인 사물함입니다.';
+    }
+    if (lockerStatusCode === 'RENTAL_REQUESTED') {
+      return '신청이 접수되어 배정을 기다리는 중입니다.';
+    }
+    return '아직 배정받은 사물함이 없습니다.';
+  }, [lockerStatusCode, myLocker]);
+  const lockerDisplayNumber = myLocker?.lockerNumber ?? '-';
 
   const membershipBadge = feeStatusLoading
     ? { label: '납부 완료', background: COLORS.blue100, color: COLORS.primary }
@@ -134,13 +179,34 @@ export default function StudentMyPageScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>나의 사물함</Text>
           <View style={styles.card}>
-            <View style={styles.cardRow}>
-              <Text style={styles.lockerId}>{lockerInfo.number}</Text>
-              <View style={[styles.statusPill, styles.statusActive]}>
-                <Text style={styles.statusPillText}>{lockerInfo.statusLabel}</Text>
+            {lockerError ? (
+              <Pressable style={styles.errorBanner} onPress={loadMyLocker} hitSlop={6}>
+                <Ionicons name="alert-circle" size={16} color={COLORS.danger} style={{ marginRight: 8 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.errorTitle}>사물함 정보를 불러오지 못했어요</Text>
+                  <Text style={styles.errorMessage}>{lockerError}</Text>
+                </View>
+                <Ionicons name="refresh" size={18} color={COLORS.danger} />
+              </Pressable>
+            ) : null}
+
+            {lockerLoading ? (
+              <View style={styles.loadingWrap}>
+                <ActivityIndicator color={COLORS.primary} />
               </View>
-            </View>
-            <Text style={styles.meta}>배정일 : {lockerInfo.assignedAt}</Text>
+            ) : null}
+
+            {!lockerLoading && !lockerError ? (
+              <>
+                <View style={styles.cardRow}>
+                  <Text style={styles.lockerId}>{lockerDisplayNumber}</Text>
+                  <View style={[styles.statusPill, { backgroundColor: lockerBadge.background }]}>
+                    <Text style={[styles.statusPillText, { color: lockerBadge.color }]}>{lockerBadge.label}</Text>
+                  </View>
+                </View>
+                <Text style={styles.meta}>{lockerMetaText}</Text>
+              </>
+            ) : null}
           </View>
         </View>
 
@@ -376,9 +442,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 4,
-  },
-  statusActive: {
-    backgroundColor: '#EEF2FF',
   },
   membershipStatusRow: {
     flexDirection: 'row',
