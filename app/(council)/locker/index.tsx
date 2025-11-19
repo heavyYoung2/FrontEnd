@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +20,9 @@ import {
   fetchLockersBySection,
   LockerInfoApi,
   LockerStatusApi,
+  makeLockerAvailable,
+  makeLockerUnavailable,
+  makeLockerUsing,
   returnCurrentSemesterLockers,
 } from '@/src/api/locker';
 
@@ -58,9 +62,9 @@ const EMPTY_SECTION: SectionState = {
 
 const STATUS_THEME: Record<string, { bg: string; border: string; text: string; label: string }> = {
   IN_USE: {
-    bg: '#FEE2E2',
-    border: '#FECACA',
-    text: COLORS.danger,
+    bg: '#E5E7EB',
+    border: '#D1D5DB',
+    text: '#374151',
     label: '사용중',
   },
   AVAILABLE: {
@@ -70,9 +74,9 @@ const STATUS_THEME: Record<string, { bg: string; border: string; text: string; l
     label: '사용 가능',
   },
   BROKEN: {
-    bg: '#E5E7EB',
-    border: '#D1D5DB',
-    text: '#374151',
+    bg: '#FEE2E2',
+    border: '#FECACA',
+    text: COLORS.danger,
     label: '사용 불가',
   },
   MY: {
@@ -107,7 +111,57 @@ export default function LockerTab() {
     });
   }, [sectionStates]);
 
+  const aggregateCounts = useMemo(() => {
+    return SECTION_LIST.reduce(
+      (acc, section) => {
+        const state = sectionStates[section];
+        if (!state || state.status !== 'loaded') return acc;
+        acc.my += state.counts.my;
+        acc.inUse += state.counts.inUse;
+        acc.available += state.counts.available;
+        acc.broken += state.counts.broken;
+        acc.total += state.counts.my + state.counts.inUse + state.counts.available + state.counts.broken;
+        return acc;
+      },
+      { total: 0, my: 0, inUse: 0, available: 0, broken: 0 },
+    );
+  }, [sectionStates]);
+
   const selectedState = sectionStates[selectedSection] ?? EMPTY_SECTION;
+
+  const handleLockerStatusChange = useCallback(
+    (
+      section: SectionId,
+      lockerId: string,
+      nextStatus: LockerStatusApi,
+      owner?: { studentId?: string; studentName?: string } | null,
+    ) => {
+      const normalizedStatus = (nextStatus ?? 'AVAILABLE').toUpperCase() as LockerStatusApi;
+      setSectionStates((prev) => {
+        const state = prev[section];
+        if (!state || state.status !== 'loaded') return prev;
+
+        const lockers = state.lockers.map((locker) => {
+          if (locker.id !== lockerId) return locker;
+          const next: LockerItem = { ...locker, status: normalizedStatus };
+          if (normalizedStatus === 'IN_USE' || normalizedStatus === 'MY') {
+            next.studentId = owner?.studentId ?? locker.studentId;
+            next.studentName = owner?.studentName ?? locker.studentName;
+          } else {
+            next.studentId = undefined;
+            next.studentName = undefined;
+          }
+          return next;
+        });
+
+        return {
+          ...prev,
+          [section]: { ...state, lockers, counts: summarizeLockers(lockers) },
+        };
+      });
+    },
+    [setSectionStates],
+  );
 
   const loadSection = useCallback(async (section: SectionId) => {
     setSectionStates((prev) => ({
@@ -241,7 +295,12 @@ export default function LockerTab() {
         </View>
 
         <View style={styles.legendCard}>
-          <Text style={styles.legendTitle}>사물함 상태</Text>
+          <View style={styles.legendHeader}>
+            <Text style={styles.legendTitle}>사물함 상태</Text>
+            <Text style={styles.legendTotal}>
+              전체: {aggregateCounts.total}개 | 사용 가능: {aggregateCounts.available}개 | 사용 불가: {aggregateCounts.broken}개
+            </Text>
+          </View>
           <View style={styles.legendRow}>
             {['MY', 'IN_USE', 'AVAILABLE', 'BROKEN'].map((key) => {
               const theme = STATUS_THEME[key];
@@ -326,6 +385,7 @@ export default function LockerTab() {
         onClose={() => setModalVisible(false)}
         state={selectedState}
         onReload={() => loadSection(selectedSection)}
+        onLockerStatusChange={handleLockerStatusChange}
       />
     </SafeAreaView>
   );
@@ -337,14 +397,146 @@ function LockerSectionModal({
   onClose,
   state,
   onReload,
+  onLockerStatusChange,
 }: {
   section: SectionId;
   visible: boolean;
   onClose: () => void;
   state: SectionState;
   onReload: () => void;
+  onLockerStatusChange: (section: SectionId, lockerId: string, status: LockerStatusApi) => void;
 }) {
   const themeKeys = ['MY', 'IN_USE', 'AVAILABLE', 'BROKEN'] as const;
+  const statusActions = ['MY', 'IN_USE', 'AVAILABLE', 'BROKEN'] as const;
+  const [selectedLocker, setSelectedLocker] = useState<LockerItem | null>(null);
+  const [savingStatus, setSavingStatus] = useState(false);
+  const [statusModalVisible, setStatusModalVisible] = useState(false);
+  const [studentIdInput, setStudentIdInput] = useState('');
+
+  useEffect(() => {
+    if (!visible) {
+      setSelectedLocker(null);
+      setSavingStatus(false);
+      setStatusModalVisible(false);
+      setStudentIdInput('');
+    }
+  }, [visible]);
+
+  useEffect(() => {
+    if (state.status !== 'loaded') {
+      setSelectedLocker(null);
+      setSavingStatus(false);
+      setStatusModalVisible(false);
+      setStudentIdInput('');
+    }
+  }, [state.status]);
+
+  const handleSelectLocker = (locker: LockerItem) => {
+    setSelectedLocker(locker);
+    setStudentIdInput('');
+    setStatusModalVisible(true);
+  };
+
+  const handleChangeToUnavailable = useCallback(async () => {
+    if (!selectedLocker) return;
+    const lockerId = Number(selectedLocker.id);
+    if (Number.isNaN(lockerId)) {
+      Alert.alert(
+        '오류',
+        '사물함 ID가 올바르지 않습니다. 관리자 API와 연동된 사물함만 상태를 변경할 수 있습니다.',
+      );
+      return;
+    }
+
+    try {
+      setSavingStatus(true);
+      await makeLockerUnavailable(lockerId);
+      onLockerStatusChange(section, selectedLocker.id, 'BROKEN');
+      setSelectedLocker((prev) =>
+        prev ? { ...prev, status: 'BROKEN', studentId: undefined, studentName: undefined } : prev,
+      );
+      Alert.alert('변경 완료', `${selectedLocker.label} 사물함을 사용 불가로 변경했습니다.`);
+      setStatusModalVisible(false);
+    } catch (error: any) {
+      console.warn('[locker] make unavailable fail', error);
+      Alert.alert('오류', error?.response?.data?.message || error?.message || '사물함 상태 변경에 실패했습니다.');
+    } finally {
+      setSavingStatus(false);
+    }
+  }, [onLockerStatusChange, section, selectedLocker]);
+
+  const handleChangeToInUse = useCallback(async () => {
+    if (!selectedLocker) return;
+    const lockerId = Number(selectedLocker.id);
+    if (Number.isNaN(lockerId)) {
+      Alert.alert('오류', '사물함 ID가 올바르지 않습니다.');
+      return;
+    }
+    const studentId = studentIdInput.trim();
+
+    try {
+      setSavingStatus(true);
+      await makeLockerUsing(lockerId, studentId || undefined);
+      onLockerStatusChange(section, selectedLocker.id, 'IN_USE', { studentId: studentId || undefined });
+      setSelectedLocker((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'IN_USE',
+              studentId: studentId || undefined,
+              studentName: prev?.studentName,
+            }
+          : prev,
+      );
+      Alert.alert('변경 완료', `${selectedLocker.label} 사물함을 사용중으로 변경했습니다.`);
+      onReload();
+      setStatusModalVisible(false);
+      setStudentIdInput('');
+    } catch (error: any) {
+      console.warn('[locker] make in-use fail', error);
+      Alert.alert('오류', error?.response?.data?.message || error?.message || '사물함 상태 변경에 실패했습니다.');
+    } finally {
+      setSavingStatus(false);
+    }
+  }, [onLockerStatusChange, onReload, section, selectedLocker, studentIdInput]);
+
+  const handleChangeToAvailable = useCallback(async () => {
+    if (!selectedLocker) return;
+    const lockerId = Number(selectedLocker.id);
+    if (Number.isNaN(lockerId)) {
+      Alert.alert('오류', '사물함 ID가 올바르지 않습니다.');
+      return;
+    }
+
+    try {
+      setSavingStatus(true);
+      await makeLockerAvailable(lockerId);
+      onLockerStatusChange(section, selectedLocker.id, 'AVAILABLE');
+      setSelectedLocker((prev) =>
+        prev ? { ...prev, status: 'AVAILABLE', studentId: undefined, studentName: undefined } : prev,
+      );
+      Alert.alert('변경 완료', `${selectedLocker.label} 사물함을 사용 가능으로 변경했습니다.`);
+      setStatusModalVisible(false);
+    } catch (error: any) {
+      console.warn('[locker] make available fail', error);
+      Alert.alert('오류', error?.response?.data?.message || error?.message || '사물함 상태 변경에 실패했습니다.');
+    } finally {
+      setSavingStatus(false);
+    }
+  }, [onLockerStatusChange, section, selectedLocker]);
+
+  const handleStatusPress = (statusKey: (typeof statusActions)[number]) => {
+    if (statusKey === 'BROKEN') {
+      handleChangeToUnavailable();
+    } else if (statusKey === 'AVAILABLE') {
+      handleChangeToAvailable();
+    } else if (statusKey === 'IN_USE') {
+      handleChangeToInUse();
+    } else {
+      Alert.alert('준비 중', '다음 단계에서 연결될 예정입니다.');
+    }
+  };
+  const selectedStatus = selectedLocker?.status.toUpperCase();
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -391,14 +583,17 @@ function LockerSectionModal({
                 {state.lockers.map((locker) => {
                   const theme = STATUS_THEME[locker.status.toUpperCase()] ?? STATUS_THEME.AVAILABLE;
                   return (
-                    <View
+                    <Pressable
                       key={locker.id}
-                      style={[
+                      onPress={() => handleSelectLocker(locker)}
+                      style={({ pressed }) => [
                         styles.lockerTile,
                         {
                           borderColor: theme.border,
                           backgroundColor: theme.bg,
                         },
+                        selectedLocker?.id === locker.id && styles.lockerTileSelected,
+                        pressed && styles.lockerTilePressed,
                       ]}
                     >
                       <Text style={[styles.lockerLabel, { color: theme.text }]}>{locker.label}</Text>
@@ -411,7 +606,7 @@ function LockerSectionModal({
                       ) : (
                         <Text style={styles.lockerMetaSecondary}>신청자 없음</Text>
                       )}
-                    </View>
+                    </Pressable>
                   );
                 })}
               </View>
@@ -419,6 +614,61 @@ function LockerSectionModal({
           )}
         </View>
       </View>
+
+      <Modal visible={statusModalVisible} animationType="fade" transparent onRequestClose={() => setStatusModalVisible(false)}>
+        <View style={styles.statusModalBackdrop}>
+          <View style={styles.statusModalCard}>
+            <View style={styles.statusActionHeader}>
+              <Text style={styles.statusActionTitle}>{selectedLocker?.label} 상태 변경</Text>
+              <Pressable
+                onPress={() => setStatusModalVisible(false)}
+                hitSlop={10}
+                style={styles.clearSelectionBtn}
+                disabled={savingStatus}
+              >
+                <Ionicons name="close" size={16} color={COLORS.text} />
+              </Pressable>
+            </View>
+              <Text style={styles.statusActionSubtitle}>변경할 상태를 선택하세요.</Text>
+              <TextInput
+                value={studentIdInput}
+                onChangeText={setStudentIdInput}
+                placeholder="사용중으로 변경할 학번 입력"
+                style={styles.statusTextInput}
+                autoCapitalize="characters"
+                autoCorrect={false}
+              />
+              <View style={styles.statusActionButtons}>
+                {statusActions.map((statusKey) => {
+                  const theme = STATUS_THEME[statusKey];
+                  const disabled =
+                  savingStatus ||
+                  (statusKey !== 'BROKEN' && statusKey !== 'AVAILABLE' && statusKey !== 'IN_USE') ||
+                  !selectedLocker;
+                  return (
+                    <Pressable
+                      key={statusKey}
+                      onPress={() => handleStatusPress(statusKey)}
+                      disabled={disabled}
+                    style={({ pressed }) => [
+                      styles.statusActionButton,
+                      { borderColor: theme.border, backgroundColor: theme.bg },
+                      pressed && styles.statusActionButtonPressed,
+                      disabled && styles.statusActionButtonDisabled,
+                    ]}
+                  >
+                    {savingStatus && (statusKey === 'BROKEN' || statusKey === 'AVAILABLE' || statusKey === 'IN_USE') ? (
+                      <ActivityIndicator size="small" color={theme.text} />
+                    ) : (
+                      <Text style={[styles.statusActionLabel, { color: theme.text }]}>{theme.label}</Text>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 }
@@ -460,7 +710,7 @@ function normalizeLockers(raw: LockerInfoApi[], _section: SectionId): LockerItem
         base.studentName = item.owner.name ?? base.studentName;
       }
 
-      if (statusUpper === 'BROKEN') {
+      if (statusUpper === 'BROKEN' || statusUpper === 'CANT_USE' || statusUpper === 'UNAVAILABLE') {
         base.status = 'BROKEN';
       } else if (statusUpper === 'IN_USE') {
         base.status = 'IN_USE';
@@ -483,7 +733,7 @@ function summarizeLockers(lockers: LockerItem[]) {
       if (status === 'IN_USE') acc.inUse += 1;
       else if (status === 'MY') acc.my += 1;
       else if (status === 'AVAILABLE') acc.available += 1;
-      else if (status === 'BROKEN') acc.broken += 1;
+      else if (status === 'BROKEN' || status === 'CANT_USE' || status === 'UNAVAILABLE') acc.broken += 1;
       return acc;
     },
     { inUse: 0, available: 0, broken: 0, my: 0 },
@@ -542,12 +792,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.text,
   },
+  legendHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  legendTotal: {
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 10,
+    color: '#6B7280',
+  },
   legendRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingHorizontal: 4,
   },
   legendChip: {
+    flex: 1,
+    alignItems: 'center',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -689,6 +952,87 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     textAlign: 'center',
   },
+  statusActionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  statusActionTitle: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 16,
+    color: COLORS.text,
+  },
+  clearSelectionBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  statusActionSubtitle: {
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 13,
+    color: '#475569',
+  },
+  statusModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  statusModalCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 12,
+  },
+  statusActionButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  statusTextInput: {
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 14,
+    color: COLORS.text,
+  },
+  statusActionButton: {
+    flex: 1,
+    minWidth: 140,
+    flexBasis: '48%',
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusActionButtonPressed: {
+    opacity: 0.92,
+  },
+  statusActionButtonDisabled: {
+    opacity: 0.55,
+  },
+  statusActionLabel: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 14,
+  },
+  statusLockerMeta: {
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 12,
+    color: '#6B7280',
+  },
   reloadBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -706,18 +1050,29 @@ const styles = StyleSheet.create({
   lockersWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    justifyContent: 'space-between',
+    rowGap: 10,
+    columnGap: 0,
+    paddingHorizontal: 4,
     paddingBottom: 8,
     paddingTop: 4,
   },
   lockerTile: {
-    width: '30%',
-    minWidth: 82,
+    flexBasis: '30%',
+    maxWidth: '30%',
+    minWidth: 90,
     borderRadius: 14,
     borderWidth: 1,
     paddingVertical: 10,
     paddingHorizontal: 8,
     gap: 5,
+  },
+  lockerTileSelected: {
+    borderColor: COLORS.primary,
+    borderWidth: 2,
+  },
+  lockerTilePressed: {
+    opacity: 0.92,
   },
   lockerLabel: {
     fontFamily: 'Pretendard-SemiBold',

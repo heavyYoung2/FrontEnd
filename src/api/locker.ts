@@ -1,6 +1,6 @@
 import { api } from './client';
 
-export type LockerStatusApi = 'AVAILABLE' | 'IN_USE' | 'BROKEN' | 'MY' | string;
+export type LockerStatusApi = 'AVAILABLE' | 'IN_USE' | 'BROKEN' | 'MY' | 'CANT_USE' | string;
 
 export type LockerInfoApi = {
   lockerId?: number;
@@ -118,6 +118,20 @@ export async function assignLockersByApplication(lockerApplicationId: number) {
 
 export async function returnCurrentSemesterLockers() {
   await api.patch<ApiResponse<null>>('/admin/lockers/return');
+}
+
+export async function makeLockerUnavailable(lockerId: number) {
+  await api.patch<ApiResponse<null>>(`/admin/lockers/${lockerId}/unavailable`);
+}
+
+export async function makeLockerAvailable(lockerId: number) {
+  await api.patch<ApiResponse<null>>(`/admin/lockers/${lockerId}/available`);
+}
+
+export async function makeLockerUsing(lockerId: number, studentId?: string) {
+  const params: Record<string, string> = {};
+  if (studentId) params.studentId = studentId;
+  await api.patch<ApiResponse<null>>(`/admin/lockers/${lockerId}/using`, undefined, { params });
 }
 
 export type LockerAssignmentInfoApi = {

@@ -99,7 +99,7 @@ const mapApiLockerStatus = (value?: LockerStatusApi | string | null): LockerStat
   const normalized = (value ?? '').toUpperCase();
   if (normalized === 'MY') return 'mine';
   if (normalized === 'IN_USE') return 'inUse';
-  if (normalized === 'BROKEN') return 'broken';
+  if (normalized === 'BROKEN' || normalized === 'CANT_USE' || normalized === 'UNAVAILABLE') return 'broken';
   return 'available';
 };
 
