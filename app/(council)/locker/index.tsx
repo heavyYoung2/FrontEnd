@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import CouncilHeader from '@/components/CouncilHeader';
+import { useAuth } from '@/src/auth/AuthProvider';
 import { COLORS } from '@/src/design/colors';
 import {
   fetchLockersBySection,
@@ -60,6 +61,15 @@ const EMPTY_SECTION: SectionState = {
   counts: { inUse: 0, available: 0, broken: 0, my: 0 },
 };
 
+const isAuthErrorMessage = (message?: string) => {
+  if (!message) return false;
+  const normalized = message.toLowerCase();
+  return normalized.includes('jwt') || normalized.includes('401') || normalized.includes('unauthorized');
+};
+
+const getErrorMessage = (error: any, fallback: string) =>
+  error?.response?.data?.message || error?.message || fallback;
+
 const STATUS_THEME: Record<string, { bg: string; border: string; text: string; label: string }> = {
   IN_USE: {
     bg: '#E5E7EB',
@@ -89,6 +99,7 @@ const STATUS_THEME: Record<string, { bg: string; border: string; text: string; l
 
 export default function LockerTab() {
   const router = useRouter();
+  const { logout } = useAuth();
   const [sectionStates, setSectionStates] = useState<Record<SectionId, SectionState>>(() =>
     SECTION_LIST.reduce((acc, section) => {
       acc[section] = { ...EMPTY_SECTION };
@@ -99,6 +110,30 @@ export default function LockerTab() {
   const [modalVisible, setModalVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [bulkReturning, setBulkReturning] = useState(false);
+
+  const handleLogoutAndRedirect = useCallback(async () => {
+    try {
+      await logout();
+    } catch (err) {
+      console.warn('[locker] logout failed', err);
+    } finally {
+      router.replace('/auth');
+    }
+  }, [logout, router]);
+
+  const alertWithSessionAction = useCallback(
+    (message: string) => {
+      if (isAuthErrorMessage(message)) {
+        Alert.alert('오류', message, [
+          { text: '확인', style: 'cancel' },
+          { text: '로그인', onPress: handleLogoutAndRedirect },
+        ]);
+      } else {
+        Alert.alert('오류', message);
+      }
+    },
+    [handleLogoutAndRedirect],
+  );
 
   const summaries = useMemo(() => {
     return SECTION_LIST.map((section) => {
@@ -178,17 +213,18 @@ export default function LockerTab() {
       }));
     } catch (error: any) {
       console.warn('[locker] fetch fail', error);
+      const message = getErrorMessage(error, '사물함 정보를 불러오지 못했습니다.');
       setSectionStates((prev) => ({
         ...prev,
         [section]: {
           ...prev[section],
           status: 'error',
-          error: error?.response?.data?.message || error?.message || '사물함 정보를 불러오지 못했습니다.',
+          error: message,
         },
       }));
-      Alert.alert('오류', error?.response?.data?.message || error?.message || '사물함 조회 실패');
+      alertWithSessionAction(message);
     }
-  }, []);
+  }, [alertWithSessionAction]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -247,7 +283,8 @@ export default function LockerTab() {
               Alert.alert('완료', '반납 처리가 완료되었습니다.');
             } catch (error: any) {
               console.warn('[locker] bulk return fail', error);
-              Alert.alert('오류', error?.response?.data?.message || error?.message || '일괄 반납에 실패했습니다.');
+              const message = getErrorMessage(error, '일괄 반납에 실패했습니다.');
+              alertWithSessionAction(message);
             } finally {
               setBulkReturning(false);
             }
@@ -386,6 +423,7 @@ export default function LockerTab() {
         state={selectedState}
         onReload={() => loadSection(selectedSection)}
         onLockerStatusChange={handleLockerStatusChange}
+        onLoginRedirect={handleLogoutAndRedirect}
       />
     </SafeAreaView>
   );
@@ -398,13 +436,20 @@ function LockerSectionModal({
   state,
   onReload,
   onLockerStatusChange,
+  onLoginRedirect,
 }: {
   section: SectionId;
   visible: boolean;
   onClose: () => void;
   state: SectionState;
   onReload: () => void;
-  onLockerStatusChange: (section: SectionId, lockerId: string, status: LockerStatusApi) => void;
+  onLockerStatusChange: (
+    section: SectionId,
+    lockerId: string,
+    status: LockerStatusApi,
+    owner?: { studentId?: string; studentName?: string } | null,
+  ) => void;
+  onLoginRedirect: () => void;
 }) {
   const themeKeys = ['MY', 'IN_USE', 'AVAILABLE', 'BROKEN'] as const;
   const statusActions = ['MY', 'IN_USE', 'AVAILABLE', 'BROKEN'] as const;
@@ -430,6 +475,20 @@ function LockerSectionModal({
       setStudentIdInput('');
     }
   }, [state.status]);
+
+  const showErrorAlert = useCallback(
+    (message: string) => {
+      if (isAuthErrorMessage(message)) {
+        Alert.alert('오류', message, [
+          { text: '확인', style: 'cancel' },
+          { text: '로그인', onPress: onLoginRedirect },
+        ]);
+      } else {
+        Alert.alert('오류', message);
+      }
+    },
+    [onLoginRedirect],
+  );
 
   const handleSelectLocker = (locker: LockerItem) => {
     setSelectedLocker(locker);
@@ -459,11 +518,12 @@ function LockerSectionModal({
       setStatusModalVisible(false);
     } catch (error: any) {
       console.warn('[locker] make unavailable fail', error);
-      Alert.alert('오류', error?.response?.data?.message || error?.message || '사물함 상태 변경에 실패했습니다.');
+      const message = getErrorMessage(error, '사물함 상태 변경에 실패했습니다.');
+      showErrorAlert(message);
     } finally {
       setSavingStatus(false);
     }
-  }, [onLockerStatusChange, section, selectedLocker]);
+  }, [onLockerStatusChange, section, selectedLocker, showErrorAlert]);
 
   const handleChangeToInUse = useCallback(async () => {
     if (!selectedLocker) return;
@@ -494,11 +554,12 @@ function LockerSectionModal({
       setStudentIdInput('');
     } catch (error: any) {
       console.warn('[locker] make in-use fail', error);
-      Alert.alert('오류', error?.response?.data?.message || error?.message || '사물함 상태 변경에 실패했습니다.');
+      const message = getErrorMessage(error, '사물함 상태 변경에 실패했습니다.');
+      showErrorAlert(message);
     } finally {
       setSavingStatus(false);
     }
-  }, [onLockerStatusChange, onReload, section, selectedLocker, studentIdInput]);
+  }, [onLockerStatusChange, onReload, section, selectedLocker, showErrorAlert, studentIdInput]);
 
   const handleChangeToAvailable = useCallback(async () => {
     if (!selectedLocker) return;
@@ -519,11 +580,12 @@ function LockerSectionModal({
       setStatusModalVisible(false);
     } catch (error: any) {
       console.warn('[locker] make available fail', error);
-      Alert.alert('오류', error?.response?.data?.message || error?.message || '사물함 상태 변경에 실패했습니다.');
+      const message = getErrorMessage(error, '사물함 상태 변경에 실패했습니다.');
+      showErrorAlert(message);
     } finally {
       setSavingStatus(false);
     }
-  }, [onLockerStatusChange, section, selectedLocker]);
+  }, [onLockerStatusChange, section, selectedLocker, showErrorAlert]);
 
   const handleStatusPress = (statusKey: (typeof statusActions)[number]) => {
     if (statusKey === 'BROKEN') {
@@ -536,7 +598,6 @@ function LockerSectionModal({
       Alert.alert('준비 중', '다음 단계에서 연결될 예정입니다.');
     }
   };
-  const selectedStatus = selectedLocker?.status.toUpperCase();
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -570,10 +631,21 @@ function LockerSectionModal({
           {state.status === 'error' && (
             <View style={styles.modalLoading}>
               <Text style={styles.modalLoadingText}>사물함을 불러오지 못했습니다.</Text>
-              <Pressable onPress={onReload} style={styles.reloadBtn}>
-                <Ionicons name="reload" size={14} color="#FFFFFF" />
-                <Text style={styles.reloadBtnText}>다시 시도</Text>
-              </Pressable>
+              {state.error ? (
+                <Text style={[styles.modalLoadingText, { color: COLORS.danger }]}>{state.error}</Text>
+              ) : null}
+              <View style={styles.modalErrorActions}>
+                <Pressable onPress={onReload} style={styles.reloadBtn}>
+                  <Ionicons name="reload" size={14} color="#FFFFFF" />
+                  <Text style={styles.reloadBtnText}>다시 시도</Text>
+                </Pressable>
+                {isAuthErrorMessage(state.error) && (
+                  <Pressable onPress={onLoginRedirect} style={[styles.reloadBtn, styles.loginBtn]}>
+                    <Ionicons name="log-out-outline" size={14} color={COLORS.primary} />
+                    <Text style={[styles.reloadBtnText, styles.loginBtnText]}>로그인</Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
           )}
 
@@ -629,27 +701,27 @@ function LockerSectionModal({
                 <Ionicons name="close" size={16} color={COLORS.text} />
               </Pressable>
             </View>
-              <Text style={styles.statusActionSubtitle}>변경할 상태를 선택하세요.</Text>
-              <TextInput
-                value={studentIdInput}
-                onChangeText={setStudentIdInput}
-                placeholder="사용중으로 변경할 학번 입력"
-                style={styles.statusTextInput}
-                autoCapitalize="characters"
-                autoCorrect={false}
-              />
-              <View style={styles.statusActionButtons}>
-                {statusActions.map((statusKey) => {
-                  const theme = STATUS_THEME[statusKey];
-                  const disabled =
+            <Text style={styles.statusActionSubtitle}>변경할 상태를 선택하세요.</Text>
+            <TextInput
+              value={studentIdInput}
+              onChangeText={setStudentIdInput}
+              placeholder="사용중으로 변경할 학번 입력"
+              style={styles.statusTextInput}
+              autoCapitalize="characters"
+              autoCorrect={false}
+            />
+            <View style={styles.statusActionButtons}>
+              {statusActions.map((statusKey) => {
+                const theme = STATUS_THEME[statusKey];
+                const disabled =
                   savingStatus ||
                   (statusKey !== 'BROKEN' && statusKey !== 'AVAILABLE' && statusKey !== 'IN_USE') ||
                   !selectedLocker;
-                  return (
-                    <Pressable
-                      key={statusKey}
-                      onPress={() => handleStatusPress(statusKey)}
-                      disabled={disabled}
+                return (
+                  <Pressable
+                    key={statusKey}
+                    onPress={() => handleStatusPress(statusKey)}
+                    disabled={disabled}
                     style={({ pressed }) => [
                       styles.statusActionButton,
                       { borderColor: theme.border, backgroundColor: theme.bg },
@@ -1046,6 +1118,19 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: 'Pretendard-SemiBold',
     fontSize: 13,
+  },
+  modalErrorActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  loginBtn: {
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  loginBtnText: {
+    color: COLORS.primary,
   },
   lockersWrap: {
     flexDirection: 'row',

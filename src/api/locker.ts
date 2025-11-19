@@ -8,10 +8,15 @@ export type LockerInfoApi = {
   lockerNum?: number;
   lockerNo?: number;
   lockerName?: string;
+  /** 서버에서 임의로 내려오는 위치 문자열 (예: A12) */
+  location?: string;
   lockerSection?: string;
   section?: string;
   sectionName?: string;
-  lockerStatus: LockerStatusApi;
+  /** 백엔드가 반환할 수 있는 임의의 id 키 (lockerId 대체) */
+  id?: number | string;
+  lockerStatus?: LockerStatusApi;
+  status?: LockerStatusApi;
   studentId?: string;
   studentNumber?: string;
   memberNumber?: string;
@@ -19,6 +24,10 @@ export type LockerInfoApi = {
   memberName?: string;
   studentName?: string;
   name?: string;
+  owner?: {
+    studentId?: string;
+    name?: string;
+  };
 };
 
 type ApiResponse<T> = {
