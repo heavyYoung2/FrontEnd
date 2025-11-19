@@ -342,8 +342,9 @@ export default function LockerTab() {
             {['MY', 'IN_USE', 'AVAILABLE', 'BROKEN'].map((key) => {
               const theme = STATUS_THEME[key];
               return (
-                <View key={key} style={[styles.legendChip, { backgroundColor: theme.bg, borderColor: theme.border }]}>
-                  <Text style={[styles.legendText, { color: theme.text }]}>{theme.label}</Text>
+                <View key={key} style={[styles.legendSummaryChip, { borderColor: theme.border }]}>
+                  <View style={[styles.legendSummaryDot, { backgroundColor: theme.text }]} />
+                  <Text style={[styles.legendSummaryLabel, { color: theme.text }]}>{theme.label}</Text>
                 </View>
               );
             })}
@@ -879,6 +880,31 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
     paddingHorizontal: 4,
+  },
+  legendSummaryChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    backgroundColor: '#F9FAFB',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+  },
+  legendSummaryDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  legendSummaryLabel: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 13,
   },
   legendChip: {
     flex: 1,
