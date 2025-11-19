@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { Buffer } from 'buffer';
 import * as SecureStore from 'expo-secure-store';
 import { login as requestLogin, logout as requestLogout, LoginPayload } from '@/src/api/auth';
 import { setAuthToken } from '@/src/api/client';
@@ -18,6 +19,7 @@ type AuthContextValue = {
   loading: boolean;
   login: (payload: LoginPayload) => Promise<void>;
   logout: () => Promise<void>;
+  isAuthenticated: boolean;
 };
 
 const STORAGE_KEYS = {
@@ -36,9 +38,34 @@ const SERVER_ROLE_TO_APP_ROLE: Record<string, Role> = {
   ADMIN: 'council',
   OWNER: 'council',
 };
-const DEFAULT_ROLE: Role = 'student';
+const DEFAULT_ROLE: Role = null;
 
 const AuthCtx = createContext<AuthContextValue | null>(null);
+
+const decodeJwt = (token?: string | null): Record<string, unknown> | null => {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const decoded =
+      typeof atob === 'function'
+        ? atob(base64)
+        : Buffer.from(base64, 'base64').toString('utf8');
+    return JSON.parse(decoded);
+  } catch (err) {
+    console.warn('[AuthProvider] failed to decode access token payload', err);
+    return null;
+  }
+};
+
+const extractMemberIdFromToken = (token?: string | null): number | null => {
+  const payload = decodeJwt(token);
+  if (!payload) return null;
+  const raw = payload.memberId ?? payload.sub ?? payload.userId;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
 export const useAuth = () => {
   const value = useContext(AuthCtx);
@@ -74,6 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [status, setStatus] = useState<string | null>(null);
   const [studentId, setStudentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -90,6 +118,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (storedAccessToken) {
           setAuthToken(storedAccessToken);
+          // Prefer token payload when persisted memberId is missing or invalid.
+          const decodedMemberId = extractMemberIdFromToken(storedAccessToken);
+          if (decodedMemberId && (!storedMemberId || !Number.isFinite(Number(storedMemberId)))) {
+            await SecureStore.setItemAsync(STORAGE_KEYS.MEMBER_ID, String(decodedMemberId));
+          }
+          setIsAuthenticated(true);
         }
 
         const restoredRole = savedRole || null;
@@ -97,7 +131,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setRole(normalizeServerRole(restoredRole));
         setCouncilAccess(canAccessCouncil(restoredRole));
         setEmail(storedEmail || null);
-        setMemberId(toNumberOrNull(storedMemberId));
+        const normalizedMemberId =
+          toNumberOrNull(storedMemberId) ?? extractMemberIdFromToken(storedAccessToken);
+        setMemberId(normalizedMemberId);
         setStatus(storedStatus || null);
         setStudentId(storedStudentId || null);
       } catch (error) {
@@ -124,6 +160,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setMemberId(null);
       setStatus(null);
       setStudentId(null);
+      setIsAuthenticated(false);
     }
   };
 
@@ -137,7 +174,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       SecureStore.setItemAsync(STORAGE_KEYS.ACCESS, response.accessToken),
       SecureStore.setItemAsync(STORAGE_KEYS.REFRESH, response.refreshToken ?? ''),
       SecureStore.setItemAsync(STORAGE_KEYS.EMAIL, payload.email ?? ''),
-      SecureStore.setItemAsync(STORAGE_KEYS.MEMBER_ID, String(response.memberId ?? '')),
+      SecureStore.setItemAsync(
+        STORAGE_KEYS.MEMBER_ID,
+        String(extractMemberIdFromToken(response.accessToken) ?? response.memberId ?? ''),
+      ),
       SecureStore.setItemAsync(STORAGE_KEYS.STATUS, ''),
       SecureStore.setItemAsync(STORAGE_KEYS.STUDENT_ID, response.studentId ?? ''),
     ]);
@@ -147,9 +187,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setRawRole(raw);
     setCouncilAccess(canAccessCouncil(raw));
     setEmail(payload.email ?? null);
-    setMemberId(response.memberId ?? null);
+    const decodedMemberId = extractMemberIdFromToken(response.accessToken);
+    setMemberId(decodedMemberId ?? response.memberId ?? null);
     setStatus(null);
     setStudentId(response.studentId ?? null);
+    setIsAuthenticated(true);
   };
 
   const logout = async () => {
@@ -175,6 +217,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         login,
         logout,
+        isAuthenticated,
       }}
     >
       {children}

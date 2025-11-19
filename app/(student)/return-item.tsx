@@ -15,7 +15,7 @@ import CouncilHeader from '@/components/CouncilHeader';
 import { generateReturnRentalQrToken } from '@/src/api/rental';
 import { COLORS } from '@/src/design/colors';
 import { TYPO } from '@/src/design/typography';
-import { ActiveRental, useMyActiveRentals } from './(tabs)/rental/hooks';
+import { ActiveRental, useMyActiveRentals } from '@/src/features/rental/hooks';
 
 const EXPIRATION_SECONDS = 30;
 
@@ -205,7 +205,7 @@ export default function StudentReturnItemScreen() {
             )}
             {!isLoading && qrToken && (
               <QRCode
-                value={qrToken}
+                value={JSON.stringify({ qrToken, itemCategoryId: selectedRental?.itemCategoryId ?? null })}
                 size={220}
                 color={isExpired ? '#BFC4CF' : COLORS.text}
                 backgroundColor="#FFFFFF"

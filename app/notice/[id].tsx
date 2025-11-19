@@ -8,6 +8,8 @@ import {
   Text,
   View,
   ActivityIndicator,
+  Image,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -41,6 +43,7 @@ export default function NoticeDetail() {
   const [loading, setLoading] = useState(true);
   const isReadonly = readonly === '1' || readonly === 'true';
   const badgeLabel = role === 'student' ? '학생' : '학생회';
+  const [viewerImage, setViewerImage] = useState<string | null>(null);
 
   const fetchDetail = useCallback(async () => {
     try {
@@ -135,6 +138,24 @@ export default function NoticeDetail() {
 
           <View style={styles.divider} />
           <Text style={styles.content}>{detail.content}</Text>
+
+          {detail.imageUrls?.length ? (
+            <>
+              <View style={styles.divider} />
+              <Text style={styles.metaKey}>첨부 이미지</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.imageRow}
+              >
+                {detail.imageUrls.map((uri) => (
+                  <Pressable key={uri} onPress={() => setViewerImage(uri)} style={styles.imageWrap}>
+                    <Image source={{ uri }} style={styles.image} resizeMode="cover" />
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </>
+          ) : null}
         </View>
 
         {!isReadonly && (
@@ -155,6 +176,13 @@ export default function NoticeDetail() {
           </View>
         )}
       </ScrollView>
+      <Modal visible={!!viewerImage} transparent animationType="fade" onRequestClose={() => setViewerImage(null)}>
+        <Pressable style={styles.viewerBackdrop} onPress={() => setViewerImage(null)}>
+          <View style={styles.viewerCard}>
+            {viewerImage ? <Image source={{ uri: viewerImage }} style={styles.viewerImage} resizeMode="contain" /> : null}
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -181,6 +209,17 @@ const styles = StyleSheet.create({
   metaVal: { color: COLORS.text, fontFamily: 'Pretendard-Medium' },
   divider: { height: 1, backgroundColor: COLORS.border, marginVertical: 12 },
   content: { color: COLORS.text, fontFamily: 'Pretendard-Medium', lineHeight: 22 },
+  imageRow: { flexDirection: 'row', gap: 10, marginTop: 8, paddingRight: 4 },
+  imageWrap: {
+    width: 240,
+    aspectRatio: 4 / 3,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  image: { width: '100%', height: '100%' },
 
   actions: { marginTop: 12, flexDirection: 'row', gap: 10 },
   editBtn: {
@@ -205,4 +244,19 @@ const styles = StyleSheet.create({
     borderColor: '#FECACA',
   },
   deleteText: { color: COLORS.danger, fontFamily: 'Pretendard-SemiBold' },
+  viewerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+  },
+  viewerCard: {
+    width: '100%',
+    backgroundColor: '#000',
+    borderRadius: 12,
+    overflow: 'hidden',
+    maxHeight: '90%',
+  },
+  viewerImage: { width: '100%', height: 480 },
 });

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   KeyboardAvoidingView,
   Keyboard,
   Platform,
@@ -28,6 +29,9 @@ export default function AuthIndexScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastAnim = useRef(new Animated.Value(0));
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showWipAlert = () =>
     Alert.alert('준비 중입니다', '해당 기능은 곧 제공될 예정이에요.');
@@ -35,6 +39,42 @@ export default function AuthIndexScreen() {
   const handleSignUp = () => {
     router.push('/auth/sign-up');
   };
+
+  const getErrorMessage = useCallback((error: unknown, fallback: string) => {
+    const resMessage =
+      typeof error === 'object' &&
+      error !== null &&
+      'response' in error &&
+      typeof (error as any).response?.data?.message === 'string'
+        ? (error as any).response.data.message
+        : null;
+    if (resMessage) return resMessage;
+    if (error instanceof Error && error.message) return error.message;
+    return fallback;
+  }, []);
+
+  const showToast = useCallback((message: string) => {
+    if (toastTimer.current) {
+      clearTimeout(toastTimer.current);
+    }
+    toastAnim.current.setValue(0);
+    setToast(message);
+    Animated.timing(toastAnim.current, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => {
+      toastTimer.current = setTimeout(() => {
+        Animated.timing(toastAnim.current, {
+          toValue: 0,
+          duration: 220,
+          useNativeDriver: true,
+        }).start(({ finished }) => {
+          if (finished) setToast(null);
+        });
+      }, 2200);
+    });
+  }, []);
 
   const handleBypass = async () => {
     if (submitting) return;
@@ -45,8 +85,8 @@ export default function AuthIndexScreen() {
       await login({ email: TEST_EMAIL, password: TEST_PASSWORD });
       router.replace('/(student)/(tabs)');
     } catch (error) {
-      const message = error instanceof Error ? error.message : '자동 로그인에 실패했습니다.';
-      Alert.alert('자동 로그인 실패', message);
+      const message = getErrorMessage(error, '자동 로그인에 실패했습니다.');
+      showToast(message);
     } finally {
       setSubmitting(false);
     }
@@ -63,9 +103,15 @@ export default function AuthIndexScreen() {
     router.replace('/(student)/(tabs)');
   }, [role, loading, router]);
 
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
+
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('로그인 정보 확인', '이메일과 비밀번호를 모두 입력해주세요.');
+      showToast('이메일과 비밀번호를 모두 입력해주세요.');
       return;
     }
 
@@ -74,8 +120,8 @@ export default function AuthIndexScreen() {
       await login({ email: email.trim(), password });
       router.replace('/(student)/(tabs)');
     } catch (error) {
-      const message = error instanceof Error ? error.message : '로그인에 실패했습니다.';
-      Alert.alert('로그인 실패', message);
+      const message = getErrorMessage(error, '로그인에 실패했습니다. 다시 시도해주세요.');
+      showToast(message);
     } finally {
       setSubmitting(false);
     }
@@ -167,6 +213,28 @@ export default function AuthIndexScreen() {
           >
             <Text style={styles.bypassText}>테스트 계정으로 로그인하기</Text>
           </Pressable>
+          {toast && (
+            <View style={styles.toastOverlay} pointerEvents="none">
+              <Animated.View
+                style={[
+                  styles.toastCard,
+                  {
+                    opacity: toastAnim.current,
+                    transform: [
+                      {
+                        translateY: toastAnim.current.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [12, 0],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                <Text style={styles.toastText}>{toast}</Text>
+              </Animated.View>
+            </View>
+          )}
         </KeyboardAvoidingView>
       </TouchableWithoutFeedback>
     </SafeAreaView>
@@ -275,5 +343,36 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontSize: 14,
     fontFamily: 'Pretendard-Medium',
+  },
+  toastOverlay: {
+    position: 'absolute',
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    backgroundColor: 'rgba(15, 23, 42, 0.18)',
+  },
+  toastCard: {
+    minWidth: '70%',
+    maxWidth: 380,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(46, 70, 240, 0.22)',
+    backgroundColor: COLORS.blue100,
+  },
+  toastText: {
+    color: COLORS.primaryNavy,
+    fontFamily: 'Pretendard-Bold',
+    fontSize: 15,
+    textAlign: 'center',
   },
 });

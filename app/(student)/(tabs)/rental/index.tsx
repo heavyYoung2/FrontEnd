@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '@/src/design/colors';
 import { TYPO } from '@/src/design/typography';
-import { useRentalDashboard } from './hooks';
+import { useRentalDashboard } from '@/src/features/rental/hooks';
 import { fetchMemberBlacklist, MemberBlacklistInfo } from '@/src/api/member';
 
 const CARD_GAP = 18;
@@ -186,11 +186,6 @@ export default function StudentRentalDashboardScreen() {
                     />
                     <View style={{ flex: 1 - availabilityRatio }} />
                   </View>
-
-                  <View style={styles.progressLabels}>
-                    <Text style={styles.progressLabel}>대여 가능 {available}개</Text>
-                    <Text style={styles.progressLabelMuted}>전체 {total}개</Text>
-                  </View>
                 </View>
               );
             })}
@@ -212,7 +207,7 @@ export default function StudentRentalDashboardScreen() {
         ) : null}
 
         <View style={styles.blacklistSection}>
-          <Text style={styles.sectionTitle}>경고 누적 조회</Text>
+          <Text style={styles.sectionTitle}>연체 페널티 조회</Text>
           {blacklistError ? (
             <Pressable
               hitSlop={10}
@@ -386,18 +381,6 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     borderRadius: 999,
-  },
-  progressLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  progressLabel: {
-    ...TYPO.caption,
-    color: COLORS.text,
-  },
-  progressLabelMuted: {
-    ...TYPO.caption,
-    color: COLORS.textMuted,
   },
   blacklistCard: {
     flexDirection: 'row',

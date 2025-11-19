@@ -8,6 +8,12 @@ export type AddEventReq = {
   eventEndDate: string;   // "yyyy-MM-dd"
 };
 
+export type EventImageInput = {
+  uri: string;
+  name?: string;
+  type?: string;
+};
+
 export type AddEventRes = {
   eventId: number;
 };
@@ -19,8 +25,23 @@ type ApiResponse<T> = {
   // code, message 등 추가 필드가 있다면 여기에 정의
 };
 
-export async function addEvent(payload: AddEventReq): Promise<AddEventRes> {
-  const { data } = await api.post<ApiResponse<AddEventRes>>('/admin/events', payload);
+export async function addEvent(payload: AddEventReq, images?: EventImageInput[]): Promise<AddEventRes> {
+  const formData = new FormData();
+  formData.append('eventAddRequestDTO', JSON.stringify(payload));
+
+  if (images && images.length > 0) {
+    images.forEach((img, idx) => {
+      formData.append('image', {
+        uri: img.uri,
+        name: img.name ?? `image-${idx + 1}.jpg`,
+        type: img.type ?? 'image/jpeg',
+      } as any);
+    });
+  }
+
+  const { data } = await api.post<ApiResponse<AddEventRes>>('/admin/events', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   if (!data?.result) throw new Error('Invalid server response');
   return data.result;
 }

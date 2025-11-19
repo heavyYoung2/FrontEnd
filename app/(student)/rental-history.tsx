@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '@/src/design/colors';
 import { TYPO } from '@/src/design/typography';
-import { RentalHistoryRecord, useRentalHistory } from './(tabs)/rental/hooks';
+import { RentalHistoryRecord, useRentalHistory } from '@/src/features/rental/hooks';
 
 const STATUS_META: Record<
   RentalHistoryRecord['status'],

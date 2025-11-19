@@ -14,10 +14,11 @@ import { useRouter } from 'expo-router';
 import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '@/src/design/colors';
 import { TYPO } from '@/src/design/typography';
-import { ActiveRental, useMyActiveRentals } from './rental/hooks';
-import { fetchMemberBlacklist, MemberBlacklistInfo } from '@/src/api/member';
-import { fetchMyLocker, MyLockerInfoApi } from '@/src/api/locker';
-import { generateStudentFeeQrToken, StudentFeeStatus } from '@/src/api/studentFee';
+import { ActiveRental } from '@/src/features/rental/hooks';
+import { fetchMyPageInfo, MemberBlacklistInfo } from '@/src/api/member';
+import { MyLockerInfoApi } from '@/src/api/locker';
+import { StudentFeeStatus } from '@/src/api/studentFee';
+import { MemberRentalItem } from '@/src/api/rental';
 import { toYMD } from '@/src/utils/date';
 
 const RENTAL_STATUS_BADGE: Record<
@@ -42,8 +43,10 @@ export default function StudentMyPageScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 16);
-  const { rentals, isLoading: rentalsLoading, error: rentalsError, refetch } = useMyActiveRentals();
 
+  const [rentals, setRentals] = useState<ActiveRental[]>([]);
+  const [rentalsLoading, setRentalsLoading] = useState(true);
+  const [rentalsError, setRentalsError] = useState<Error | null>(null);
   const hasRentals = rentals.length > 0;
   const [myLocker, setMyLocker] = useState<MyLockerInfoApi | null>(null);
   const [lockerLoading, setLockerLoading] = useState(true);
@@ -56,63 +59,72 @@ export default function StudentMyPageScreen() {
   const [feeStatusCheckedAt, setFeeStatusCheckedAt] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadMyLocker = useCallback(async () => {
+  const toActiveRental = useCallback((item: MemberRentalItem): ActiveRental | null => {
+    const status = (item.rentalStatus ?? 'IN_PROGRESS').toUpperCase();
+    if (status !== 'IN_PROGRESS' && status !== 'OVERDUE') return null;
+    const rentedRaw = item.rentalStartedAt ?? null;
+    return {
+      id:
+        item.rentalHistoryId != null
+          ? String(item.rentalHistoryId)
+          : `${item.itemName}-${item.rentalStartedAt ?? ''}`,
+      itemName: item.itemName,
+      rentedAt: rentedRaw ?? '-',
+      expectedReturnAt: item.expectedReturnAt ?? '-',
+      returnedAt: item.returnedAt ?? null,
+      status: status === 'OVERDUE' ? 'OVERDUE' : 'IN_PROGRESS',
+      rentalHistoryId: item.rentalHistoryId,
+      itemCategoryId: item.itemCategoryId,
+    };
+  }, []);
+
+  const loadMyPage = useCallback(async () => {
     setLockerLoading(true);
     setLockerError(null);
-    try {
-      const data = await fetchMyLocker();
-      setMyLocker(data);
-    } catch (err: any) {
-      console.warn('[student mypage] locker fetch failed', err);
-      setLockerError(err?.response?.data?.message || err?.message || '사물함 정보를 불러오지 못했습니다.');
-    } finally {
-      setLockerLoading(false);
-    }
-  }, []);
-
-  const loadBlacklist = useCallback(async () => {
     setBlacklistLoading(true);
     setBlacklistError(null);
-    try {
-      const data = await fetchMemberBlacklist();
-      setBlacklist(data);
-    } catch (err) {
-      console.warn('[member blacklist] fetch failed', err);
-      setBlacklistError(err instanceof Error ? err : new Error('블랙리스트 정보를 불러오지 못했습니다.'));
-    } finally {
-      setBlacklistLoading(false);
-    }
-  }, []);
-
-  const loadStudentFeeStatus = useCallback(async () => {
+    setRentalsLoading(true);
+    setRentalsError(null);
     setFeeStatusLoading(true);
     try {
-      const result = await generateStudentFeeQrToken();
-      setFeeStatus(result.studentFeeStatus);
+      const result = await fetchMyPageInfo();
+      setMyLocker(result.locker);
+      setBlacklist(result.blacklist);
+      const active = result.items
+        .map(toActiveRental)
+        .filter((item): item is ActiveRental => Boolean(item))
+        .sort((a, b) => (Date.parse(b.rentedAt) || 0) - (Date.parse(a.rentedAt) || 0));
+      setRentals(active);
+      setFeeStatus(result.isStudentFeePaid ? 'PAID' : 'NOT_PAID');
       setFeeStatusCheckedAt(new Date().toISOString().slice(0, 10));
-    } catch (err) {
-      console.warn('[student fee status] fetch failed', err);
+    } catch (err: any) {
+      const message = err?.response?.data?.message || err?.message || '마이페이지 정보를 불러오지 못했습니다.';
+      setLockerError(message);
+      setBlacklistError(err instanceof Error ? err : new Error(message));
+      setRentalsError(err instanceof Error ? err : new Error(message));
+      setFeeStatus('YET');
     } finally {
+      setLockerLoading(false);
+      setBlacklistLoading(false);
+      setRentalsLoading(false);
       setFeeStatusLoading(false);
     }
-  }, []);
+  }, [toActiveRental]);
 
   useEffect(() => {
-    loadMyLocker();
-    loadBlacklist();
-    loadStudentFeeStatus();
-  }, [loadBlacklist, loadMyLocker, loadStudentFeeStatus]);
+    loadMyPage();
+  }, [loadMyPage]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.all([refetch(), loadMyLocker(), loadBlacklist(), loadStudentFeeStatus()]);
+      await loadMyPage();
     } catch (err) {
       console.warn('[student mypage] refresh failed', err);
     } finally {
       setRefreshing(false);
     }
-  }, [loadBlacklist, loadMyLocker, loadStudentFeeStatus, refetch]);
+  }, [loadMyPage]);
 
   const blacklistView = useMemo(() => {
     if (blacklistLoading) {
@@ -149,7 +161,7 @@ export default function StudentMyPageScreen() {
     }
     return '아직 배정받은 사물함이 없습니다.';
   }, [lockerStatusCode, myLocker]);
-  const lockerDisplayNumber = myLocker?.lockerNumber ?? '-';
+  const lockerDisplayNumber = lockerStatusCode === 'NO_RENTAL' ? '대여 정보 없음' : myLocker?.lockerNumber ?? '-';
 
   const membershipBadge = feeStatusLoading
     ? { label: '납부 완료', background: COLORS.blue100, color: COLORS.primary }
@@ -180,7 +192,7 @@ export default function StudentMyPageScreen() {
           <Text style={styles.sectionTitle}>나의 사물함</Text>
           <View style={styles.card}>
             {lockerError ? (
-              <Pressable style={styles.errorBanner} onPress={loadMyLocker} hitSlop={6}>
+              <Pressable style={styles.errorBanner} onPress={loadMyPage} hitSlop={6}>
                 <Ionicons name="alert-circle" size={16} color={COLORS.danger} style={{ marginRight: 8 }} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.errorTitle}>사물함 정보를 불러오지 못했어요</Text>
@@ -225,7 +237,7 @@ export default function StudentMyPageScreen() {
 
           <View style={styles.card}>
             {rentalsError ? (
-              <Pressable style={styles.errorBanner} onPress={refetch} hitSlop={6}>
+              <Pressable style={styles.errorBanner} onPress={loadMyPage} hitSlop={6}>
                 <Ionicons name="alert-circle" size={16} color={COLORS.danger} style={{ marginRight: 8 }} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.errorTitle}>대여 정보를 불러오지 못했어요</Text>
@@ -331,11 +343,11 @@ export default function StudentMyPageScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>경고 누적 조회</Text>
+          <Text style={styles.sectionTitle}>연체 페널티 조회</Text>
           {blacklistError ? (
             <Pressable
               hitSlop={10}
-              onPress={loadBlacklist}
+              onPress={loadMyPage}
               style={[styles.warningCard, styles.warningError]}
             >
               <Ionicons name="warning-outline" size={18} color={COLORS.danger} style={{ marginRight: 8 }} />

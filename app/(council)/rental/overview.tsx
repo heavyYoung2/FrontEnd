@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Platform,
   Pressable,
@@ -18,10 +19,16 @@ import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '@/src/design/colors';
 import { TYPO } from '@/src/design/typography';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { AdminRentalHistory, AdminRentalStatus, fetchAdminRentalHistories } from '@/src/api/rentalAdmin';
+import {
+  AdminRentalHistory,
+  AdminRentalStatus,
+  fetchAdminRentalHistories,
+  manuallyReturnRentalHistory,
+} from '@/src/api/rentalAdmin';
 
 type RentalRecord = {
   id: string;
+  rentalHistoryId: number | null;
   category: string;
   itemName: string;
   renterName: string;
@@ -94,6 +101,7 @@ const mapHistoryToRecord = (history: AdminRentalHistory): RentalRecord => {
   const normalizedCategory = rawCategory === '기타' ? '' : rawCategory;
   return {
     id: identifier,
+    rentalHistoryId: history.rentalHistoryId,
     category: normalizedCategory,
     itemName: history.itemName,
     renterName: history.renterName,
@@ -117,6 +125,7 @@ export default function RentalOverviewScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const loadRecords = useCallback(async () => {
     setError(null);
@@ -324,11 +333,25 @@ export default function RentalOverviewScreen() {
       <ConfirmReturnModal
         visible={!!pendingRecord}
         record={pendingRecord}
-        onCancel={() => setPendingRecord(null)}
-        onConfirm={() => {
-          if (!pendingRecord) return;
-          setRecords((prev) => prev.filter((item) => item.id !== pendingRecord.id));
-          setPendingRecord(null);
+        submitting={submitting}
+        onCancel={() => (submitting ? undefined : setPendingRecord(null))}
+        onConfirm={async () => {
+          if (!pendingRecord?.rentalHistoryId) {
+            Alert.alert('반납 처리 실패', '대여 이력 정보를 찾을 수 없어요.');
+            setPendingRecord(null);
+            return;
+          }
+          try {
+            setSubmitting(true);
+            await manuallyReturnRentalHistory(pendingRecord.rentalHistoryId);
+            await loadRecords();
+            setPendingRecord(null);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : '반납 처리에 실패했습니다.';
+            Alert.alert('반납 처리 실패', message);
+          } finally {
+            setSubmitting(false);
+          }
         }}
       />
     </SafeAreaView>
@@ -459,9 +482,10 @@ type ConfirmReturnModalProps = {
   record: RentalRecord | null;
   onConfirm: () => void;
   onCancel: () => void;
+  submitting: boolean;
 };
 
-function ConfirmReturnModal({ visible, record, onConfirm, onCancel }: ConfirmReturnModalProps) {
+function ConfirmReturnModal({ visible, record, onConfirm, onCancel, submitting }: ConfirmReturnModalProps) {
   return (
     <Modal transparent visible={visible} animationType="fade" onRequestClose={onCancel}>
       <View style={styles.modalBackdrop}>
@@ -479,15 +503,21 @@ function ConfirmReturnModal({ visible, record, onConfirm, onCancel }: ConfirmRet
           <View style={styles.confirmActions}>
             <Pressable
               onPress={onCancel}
-              style={({ pressed }) => [styles.modalGhostBtn, pressed && { opacity: 0.9 }]}
+              disabled={submitting}
+              style={({ pressed }) => [styles.modalGhostBtn, pressed && { opacity: 0.9 }, submitting && { opacity: 0.5 }]}
             >
               <Text style={styles.modalGhostText}>취소</Text>
             </Pressable>
             <Pressable
               onPress={onConfirm}
-              style={({ pressed }) => [styles.modalPrimaryBtn, pressed && { opacity: 0.9 }]}
+              disabled={submitting}
+              style={({ pressed }) => [
+                styles.modalPrimaryBtn,
+                pressed && { opacity: 0.9 },
+                submitting && { opacity: 0.5 },
+              ]}
             >
-              <Text style={styles.modalPrimaryText}>확인</Text>
+              <Text style={styles.modalPrimaryText}>{submitting ? '처리 중...' : '확인'}</Text>
             </Pressable>
           </View>
         </View>

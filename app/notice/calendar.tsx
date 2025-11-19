@@ -1,5 +1,9 @@
 // app/notice/calendar.tsx
 import React, { useCallback, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { addDays, endOfMonth, format, startOfMonth } from 'date-fns';
 import {
   ActivityIndicator,
   Pressable,
@@ -8,7 +12,10 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { Calendar } from 'react-native-calendars';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import CouncilHeader from '@/components/CouncilHeader';
+import { getAdminEvents, AdminEventInfo } from '../../src/api/adminEvents';
 
 type RNCalDateObject = {
   dateString: string;
@@ -17,14 +24,6 @@ type RNCalDateObject = {
   year: number;
   timestamp: number;
 };
-
-import { Calendar } from 'react-native-calendars';
-import { addDays, endOfMonth, format, startOfMonth } from 'date-fns';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { getAdminEvents, AdminEventInfo } from '../../src/api/adminEvents';
-import CouncilHeader from '@/components/CouncilHeader';
 
 const COLORS = {
   primary: '#2E46F0',

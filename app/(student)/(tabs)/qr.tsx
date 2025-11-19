@@ -1,14 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 import CouncilHeader from '@/components/CouncilHeader';
@@ -21,15 +14,16 @@ const EXPIRATION_SECONDS = 30;
 type FetchState = 'idle' | 'loading' | 'success' | 'error';
 
 export default function StudentQRScreen() {
-  const router = useRouter();
   const [fetchState, setFetchState] = useState<FetchState>('idle');
   const [qrToken, setQrToken] = useState<string | null>(null);
   const [feeStatus, setFeeStatus] = useState<StudentFeeStatus | null>(null);
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [toast, setToast] = useState<string | null>(null);
+  const toastOpacity = useRef(new Animated.Value(0)).current;
 
-  const requestToken = useCallback(async () => {
+  const requestToken = useCallback(async (): Promise<StudentFeeStatus | null> => {
     setFetchState('loading');
     setErrorMessage(null);
     try {
@@ -40,6 +34,7 @@ export default function StudentQRScreen() {
       setExpiresAt(issuedAt + EXPIRATION_SECONDS * 1000);
       setNow(issuedAt);
       setFetchState('success');
+      return result.studentFeeStatus;
     } catch (err) {
       console.warn('[student fee QR] fetch failed', err);
       setFetchState('error');
@@ -47,6 +42,7 @@ export default function StudentQRScreen() {
       setQrToken(null);
       setFeeStatus(null);
       setExpiresAt(null);
+      return null;
     }
   }, []);
 
@@ -104,10 +100,21 @@ export default function StudentQRScreen() {
 
   const showDuesButton = !isLoading && feeStatus !== 'PAID';
 
-  const handleOpenDuesCheck = useCallback(() => {
-    if (!showDuesButton) return;
-    router.push('/(student)/dues-check');
-  }, [router, showDuesButton]);
+  const handleOpenDuesCheck = useCallback(async () => {
+    if (isLoading) return;
+    const status = await requestToken();
+    if (status === 'NOT_PAID') {
+      setToast('학생회비 미납 대상입니다. 회비 납부는 학생회에 문의해주세요');
+      toastOpacity.setValue(0);
+      Animated.timing(toastOpacity, { toValue: 1, duration: 150, useNativeDriver: true }).start(() => {
+        setTimeout(() => {
+          Animated.timing(toastOpacity, { toValue: 0, duration: 200, useNativeDriver: true }).start(() =>
+            setToast(null),
+          );
+        }, 800);
+      });
+    }
+  }, [isLoading, requestToken, toastOpacity]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
@@ -210,6 +217,13 @@ export default function StudentQRScreen() {
           )}
         </View>
       </View>
+      {toast && (
+        <View style={styles.toastOverlay} pointerEvents="none">
+          <Animated.View style={[styles.toastCard, { opacity: toastOpacity }]}>
+            <Text style={styles.toastText}>{toast}</Text>
+          </Animated.View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -410,5 +424,29 @@ const styles = StyleSheet.create({
     ...TYPO.bodySm,
     color: COLORS.danger,
     flexShrink: 1,
+  },
+  toastOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+  },
+  toastCard: {
+    minWidth: '70%',
+    maxWidth: 360,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: 'rgba(46,70,240,0.92)',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  toastText: {
+    ...TYPO.body,
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
 });

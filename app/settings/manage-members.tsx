@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -39,10 +40,12 @@ export default function ManageMembersScreen() {
   const [modalState, setModalState] = useState<ModalState>(null);
   const [modalBusy, setModalBusy] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadMembers = useCallback(async () => {
     try {
       setIsLoading(true);
+      setFeedback(null);
       const data = await fetchCouncilMembers();
       setMembers(data);
     } catch (err) {
@@ -55,6 +58,12 @@ export default function ManageMembersScreen() {
 
   useEffect(() => {
     loadMembers();
+  }, [loadMembers]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadMembers();
+    setRefreshing(false);
   }, [loadMembers]);
 
   const isAddDisabled = useMemo(() => {
@@ -103,16 +112,16 @@ export default function ManageMembersScreen() {
     if (!modalState || modalState.type !== 'add') return;
     try {
       setModalBusy(true);
-      const created = await addCouncilMemberApi(modalState.candidate.studentId);
-      const createdMember: CouncilMember = created ?? {
+      const created = await addCouncilMemberApi(modalState.candidate.memberId);
+      const createdMember: CouncilMember = {
+        councilMemberId: modalState.candidate.memberId,
         studentId: modalState.candidate.studentId,
         name: modalState.candidate.name,
+        ...created,
       };
 
-      setMembers((prev) => [
-        createdMember,
-        ...prev.filter((m) => m.studentId !== createdMember.studentId),
-      ]);
+      // Reflect with fresh data so the list stays in sync with the server.
+      await loadMembers();
       setInput('');
       setFeedback({
         tone: 'success',
@@ -125,14 +134,19 @@ export default function ManageMembersScreen() {
     } finally {
       setModalBusy(false);
     }
-  }, [modalState]);
+  }, [modalState, loadMembers]);
 
   const handleConfirmRemove = useCallback(async () => {
     if (!modalState || modalState.type !== 'remove') return;
+    if (!modalState.member.councilMemberId) {
+      setFeedback({ tone: 'error', text: '사용자 ID를 확인할 수 없어 삭제할 수 없습니다.' });
+      setModalState(null);
+      return;
+    }
     try {
       setModalBusy(true);
-      await removeCouncilMemberApi(modalState.member.studentId);
-      setMembers((prev) => prev.filter((m) => m.studentId !== modalState.member.studentId));
+      await removeCouncilMemberApi(modalState.member.councilMemberId);
+      await loadMembers();
       setFeedback({
         tone: 'success',
         text: `${modalState.member.studentId} ${modalState.member.name}님을 학생회에서 제거했습니다.`,
@@ -144,13 +158,18 @@ export default function ManageMembersScreen() {
     } finally {
       setModalBusy(false);
     }
-  }, [modalState]);
+  }, [modalState, loadMembers]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <CouncilHeader studentId="C246120" title="학생회 인원 관리하기" showBack />
 
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={COLORS.primary} />
+        }
+      >
         <View style={styles.card}>
           <Text style={styles.label}>학생회 추가하기</Text>
           <View style={styles.addRow}>
@@ -363,7 +382,7 @@ type ConfirmModalProps = {
   onCancel: () => void;
   confirmLabel?: string;
   cancelLabel?: string;
-  loading?: boolean;
+    loading?: boolean;
 };
 
 function ConfirmModal({

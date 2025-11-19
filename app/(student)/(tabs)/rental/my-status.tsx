@@ -14,7 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '@/src/design/colors';
 import { TYPO } from '@/src/design/typography';
-import { ActiveRental, useMyActiveRentals } from './hooks';
+import { ActiveRental, useMyActiveRentals } from '@/src/features/rental/hooks';
 
 const STATUS_META: Record<
   ActiveRental['status'],

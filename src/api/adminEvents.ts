@@ -59,8 +59,29 @@ export type UpdateAdminEventReq = {
   eventStartDate?: string; // yyyy-MM-dd
   eventEndDate?: string;   // yyyy-MM-dd
 };
-export async function updateAdminEvent(id: number, payload: UpdateAdminEventReq) {
-  const { data } = await api.put(`/admin/events/${id}`, payload);
+export type EventImageInput = {
+  uri: string;
+  name?: string;
+  type?: string;
+};
+
+export async function updateAdminEvent(id: number, payload: UpdateAdminEventReq, images?: EventImageInput[]) {
+  const formData = new FormData();
+  formData.append('eventPutRequestDTO', JSON.stringify(payload));
+
+  if (images && images.length > 0) {
+    images.forEach((img, idx) => {
+      formData.append('image', {
+        uri: img.uri,
+        name: img.name ?? `image-${idx + 1}.jpg`,
+        type: img.type ?? 'image/jpeg',
+      } as any);
+    });
+  }
+
+  const { data } = await api.put(`/admin/events/${id}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return data.result as { eventId: number };
 }
 
@@ -68,4 +89,3 @@ export async function updateAdminEvent(id: number, payload: UpdateAdminEventReq)
 export async function deleteAdminEvent(id: number) {
   await api.delete(`/admin/events/${id}`);
 }
-

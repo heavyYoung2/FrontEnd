@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '@/src/design/colors';
 import { TYPO } from '@/src/design/typography';
-import { GuidelineSection, useRentalGuidelines } from './hooks';
+import { GuidelineSection, useRentalGuidelines } from '@/src/features/rental/hooks';
 
 export default function StudentRentalGuideScreen() {
   const router = useRouter();
@@ -202,4 +202,3 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
 });
-

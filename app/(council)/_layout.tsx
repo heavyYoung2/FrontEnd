@@ -6,11 +6,11 @@ export default function CouncilTabs() {
   return (
     <Tabs
       screenOptions={{ headerShown: false }}
-      tabBar={(p) => <HBTabBar {...p} centerRoute="index" />}  // 중앙: index(달력/공지)
+      tabBar={(p) => <HBTabBar {...p} centerRoute="index" />}
     >
       <Tabs.Screen name="qr" />
       <Tabs.Screen name="rental" />
-      <Tabs.Screen name="index" />   {/* 가운데 플로팅 */}
+      <Tabs.Screen name="index" />
       <Tabs.Screen name="locker" />
       <Tabs.Screen name="mypage" />
     </Tabs>

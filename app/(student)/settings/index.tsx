@@ -25,7 +25,7 @@ const MENU = [
 
 export default function StudentSettingsHome() {
   const router = useRouter();
-  const { logout, canAccessCouncil, rawRole } = useAuth();
+  const { logout, canAccessCouncil } = useAuth();
 
   const handleAction = (action: (typeof MENU)[number]['action']) => {
     switch (action) {

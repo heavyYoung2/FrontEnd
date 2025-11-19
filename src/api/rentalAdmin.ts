@@ -1,4 +1,5 @@
 import { isAxiosError } from 'axios';
+import { Buffer } from 'buffer';
 import { api } from './client';
 
 type ApiResponse<T> = {
@@ -166,14 +167,60 @@ export class RentalQrScanError extends Error {
   }
 }
 
-export async function rentItemByQrToken(qrToken: string): Promise<void> {
-  const trimmed = typeof qrToken === 'string' ? qrToken.trim() : '';
+const decodeJwtPayload = (token: string): Record<string, unknown> | null => {
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const decoded =
+      typeof atob === 'function'
+        ? atob(padded)
+        : Buffer.from(padded, 'base64').toString('utf8');
+    return JSON.parse(decoded);
+  } catch (err) {
+    console.warn('[rentalAdmin] failed to decode rental QR token payload', err);
+    return null;
+  }
+};
+
+const normalizeRentalQrPayload = (raw: string): { qrToken: string; itemCategoryId: number | null } => {
+  const trimmed = typeof raw === 'string' ? raw.trim() : '';
   if (!trimmed) {
+    return { qrToken: '', itemCategoryId: null };
+  }
+
+  // First, see if the QR text is a JSON string with qrToken + itemCategoryId.
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === 'object' && typeof (parsed as any).qrToken === 'string') {
+      const itemCategoryId = toNullableNumber((parsed as any).itemCategoryId);
+      return { qrToken: (parsed as any).qrToken, itemCategoryId };
+    }
+  } catch {
+    // Not a JSON payload; fall back to bare token handling.
+  }
+
+  // Try to sniff itemCategoryId from JWT payload if present.
+  const payload = decodeJwtPayload(trimmed);
+  const inferredItemCategoryId = payload ? toNullableNumber(payload.itemCategoryId ?? payload.categoryId) : null;
+
+  return { qrToken: trimmed, itemCategoryId: inferredItemCategoryId };
+};
+
+export async function rentItemByQrToken(qrTokenOrPayload: string): Promise<void> {
+  const { qrToken, itemCategoryId } = normalizeRentalQrPayload(qrTokenOrPayload);
+  if (!qrToken) {
     throw new RentalQrScanError('올바른 QR 코드가 아닙니다.');
   }
 
+  const body: Record<string, unknown> = { qrToken };
+  if (itemCategoryId != null) {
+    body.itemCategoryId = itemCategoryId;
+  }
+
   try {
-    const { data } = await api.post<ApiResponse<null>>('/admin/rentals/qr', { qrToken: trimmed });
+    const { data } = await api.post<ApiResponse<null>>('/admin/rentals/qr', body);
     if (!data?.isSuccess) {
       const code = normalizeRentalErrorCode((data as ApiErrorPayload)?.code ?? (data as ApiErrorPayload)?.errorCode);
       throw new RentalQrScanError(data?.message ?? DEFAULT_ERROR_MESSAGE, { code });
@@ -193,14 +240,19 @@ export async function rentItemByQrToken(qrToken: string): Promise<void> {
   }
 }
 
-export async function returnItemByQrToken(qrToken: string): Promise<void> {
-  const trimmed = typeof qrToken === 'string' ? qrToken.trim() : '';
-  if (!trimmed) {
+export async function returnItemByQrToken(qrTokenOrPayload: string): Promise<void> {
+  const { qrToken, itemCategoryId } = normalizeRentalQrPayload(qrTokenOrPayload);
+  if (!qrToken) {
     throw new RentalQrScanError('올바른 QR 코드가 아닙니다.');
   }
 
+  const body: Record<string, unknown> = { qrToken };
+  if (itemCategoryId != null) {
+    body.itemCategoryId = itemCategoryId;
+  }
+
   try {
-    const { data } = await api.post<ApiResponse<null>>('/admin/rentals/return', { qrToken: trimmed });
+    const { data } = await api.post<ApiResponse<null>>('/admin/rentals/return', body);
     if (!data?.isSuccess) {
       const code = normalizeRentalErrorCode((data as ApiErrorPayload)?.code ?? (data as ApiErrorPayload)?.errorCode);
       throw new RentalQrScanError(data?.message ?? DEFAULT_ERROR_MESSAGE, { code });
@@ -226,4 +278,45 @@ export async function fetchAdminRentalHistories(): Promise<AdminRentalHistory[]>
     return [];
   }
   return normalizeAdminRentalHistoryList(data.result);
+}
+
+export async function manuallyReturnRentalHistory(rentalHistoryId: number): Promise<void> {
+  if (!Number.isFinite(rentalHistoryId)) {
+    throw new RentalQrScanError('유효하지 않은 대여 이력입니다.');
+  }
+
+  const candidatePaths = [`/admin/rentals/${rentalHistoryId}/return`, `/admin/lockers/${rentalHistoryId}/return`];
+  let lastError: unknown;
+
+  for (const path of candidatePaths) {
+    try {
+      const { data } = await api.post<ApiResponse<null>>(path);
+      if (!data?.isSuccess) {
+        const code = normalizeRentalErrorCode((data as ApiErrorPayload)?.code ?? (data as ApiErrorPayload)?.errorCode);
+        throw new RentalQrScanError(data?.message ?? '반납 처리를 완료하지 못했습니다.', { code });
+      }
+      return;
+    } catch (error) {
+      lastError = error;
+      // Try the next path if this one failed (e.g., 404/405)
+      if (isAxiosError(error) && error.response?.status && error.response.status >= 500) {
+        break;
+      }
+    }
+  }
+
+  if (lastError) {
+    if (isAxiosError(lastError)) {
+      const payload = lastError.response?.data as ApiErrorPayload | undefined;
+      const rawCode = payload?.code ?? payload?.errorCode ?? payload?.status;
+      const code = normalizeRentalErrorCode(rawCode);
+      const message = payload?.message ?? '반납 처리를 완료하지 못했습니다.';
+      throw new RentalQrScanError(message, { code, status: lastError.response?.status });
+    }
+    if (lastError instanceof RentalQrScanError) {
+      throw lastError;
+    }
+  }
+
+  throw new RentalQrScanError('반납 처리를 완료하지 못했습니다.');
 }

@@ -3,9 +3,12 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
   Alert,
+  Image,
   Keyboard,
   Modal,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,7 +19,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { addEvent } from '../../src/api/event';
 import CouncilHeader from '@/components/CouncilHeader';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Platform } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { useAuth } from '@/src/auth/AuthProvider';
 
 const COLORS = {
   primary: '#2E46F0',
@@ -27,8 +31,12 @@ const COLORS = {
   bg: '#F5F7FA',
 };
 
+const MAX_SINGLE_IMAGE_BYTES = 4 * 1024 * 1024; // 4MB
+const MAX_TOTAL_IMAGE_BYTES = 8 * 1024 * 1024; // 8MB
+
 export default function NoticeWriteScreen() {
   const router = useRouter();
+  const { isAuthenticated, loading: authLoading } = useAuth();
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -36,6 +44,8 @@ export default function NoticeWriteScreen() {
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [activePicker, setActivePicker] = useState<'start' | 'end' | null>(null);
   const [tempDate, setTempDate] = useState<Date>(new Date());
+  const [images, setImages] = useState<ImagePicker.ImagePickerAsset[]>([]);
+  const [picking, setPicking] = useState(false);
 
   const openPicker = (type: 'start' | 'end') => {
     const base =
@@ -44,6 +54,39 @@ export default function NoticeWriteScreen() {
         : endDate ?? startDate ?? new Date();
     setTempDate(base);
     setActivePicker(type);
+  };
+
+  const handlePickImage = async () => {
+    if (picking) return;
+    setPicking(true);
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('알림', '사진 접근 권한이 필요합니다.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        quality: 0.6,
+        allowsMultipleSelection: true,
+        selectionLimit: 5,
+      });
+      if (!result.canceled) {
+        const { accepted, rejectedNames } = filterOversizedImages(images, result.assets);
+        if (rejectedNames.length) {
+          Alert.alert('용량 제한', `이미지 용량이 너무 큽니다. 다른 사진을 선택해주세요.\n(${rejectedNames.join(', ')})`);
+        }
+        if (accepted.length) {
+          setImages((prev) => [...prev, ...accepted]);
+        }
+      }
+    } finally {
+      setPicking(false);
+    }
+  };
+
+  const handleRemoveImage = (uri: string) => {
+    setImages((prev) => prev.filter((img) => img.uri !== uri));
   };
 
   const handleConfirmDate = (type: 'start' | 'end' | null, nextDate: Date) => {
@@ -76,25 +119,49 @@ export default function NoticeWriteScreen() {
     }
 
     try {
-      const res = await addEvent({
-        title: title.trim(),
-        content: content.trim(),
-        eventStartDate: formatDateValue(startDate),
-        eventEndDate: formatDateValue(endDate),
-      });
+      const res = await addEvent(
+        {
+          title: title.trim(),
+          content: content.trim(),
+          eventStartDate: formatDateValue(startDate),
+          eventEndDate: formatDateValue(endDate),
+        },
+        images.map((asset, idx) => ({
+          uri: asset.uri,
+          name: asset.fileName ?? `image-${idx + 1}.jpg`,
+          type: asset.mimeType ?? 'image/jpeg',
+        }))
+      );
       Alert.alert('완료', `공지 생성 성공 (id=${res.eventId})`, [
         { text: '확인', onPress: () => router.back() },
       ]);
     } catch (e: any) {
-      const msg = e?.response?.data?.message || e?.message || '요청 실패';
+      const status = e?.response?.status;
+      const msg =
+        status === 413
+          ? '첨부 이미지 용량이 서버 제한을 초과했습니다. 사진 크기를 줄이거나 개수를 줄여주세요.'
+          : e?.response?.data?.message || e?.message || '요청 실패';
       Alert.alert('실패', String(msg));
     }
-  };  
- 
+  };
+
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <CouncilHeader studentId="C246120" title="공지 작성" showBack />
+
+        {!isAuthenticated && !authLoading ? (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 }}>
+            <Text style={{ color: COLORS.text, fontFamily: 'Pretendard-Medium', textAlign: 'center' }}>로그인이 필요합니다!</Text>
+            <Pressable
+              onPress={() => router.replace('/auth')}
+              style={({ pressed }) => [styles.submitBtn, pressed && { opacity: 0.92 }]}
+            >
+              <Text style={styles.submitText}>로그인하러 가기</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
 
         {/* (3) 입력 카드 */}
         <View style={styles.card}>
@@ -135,6 +202,27 @@ export default function NoticeWriteScreen() {
             </Text>
           </Pressable>
 
+          <Text style={[styles.label, { marginTop: 12 }]}>이미지</Text>
+          <ScrollView horizontal contentContainerStyle={styles.imageRow} showsHorizontalScrollIndicator={false}>
+            {images.map((img) => (
+              <View key={img.uri} style={styles.imageWrap}>
+                <Image source={{ uri: img.uri }} style={styles.imageThumb} />
+                <Pressable
+                  onPress={() => handleRemoveImage(img.uri)}
+                  style={({ pressed }) => [styles.removeBadge, pressed && { opacity: 0.9 }]}
+                >
+                  <Text style={styles.removeBadgeText}>×</Text>
+                </Pressable>
+              </View>
+            ))}
+            <Pressable
+              onPress={handlePickImage}
+              style={({ pressed }) => [styles.addImageButton, pressed && { opacity: 0.92 }]}
+            >
+              <Text style={styles.addImageText}>{picking ? '열기 중...' : '+ 추가'}</Text>
+            </Pressable>
+          </ScrollView>
+
           <Pressable
             onPress={onSubmit}
             style={({ pressed }) => [
@@ -153,6 +241,8 @@ export default function NoticeWriteScreen() {
           onDismiss={() => setActivePicker(null)}
           onConfirm={() => handleConfirmDate(activePicker, tempDate)}
         />
+          </>
+        )}
       </SafeAreaView>
     </TouchableWithoutFeedback>
   );
@@ -172,6 +262,31 @@ function formatDateValue(date: Date | null) {
   const m = `${date.getMonth() + 1}`.padStart(2, '0');
   const d = `${date.getDate()}`.padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+function filterOversizedImages(
+  current: ImagePicker.ImagePickerAsset[],
+  next: ImagePicker.ImagePickerAsset[]
+) {
+  let total = current.reduce((sum, img) => sum + (img.fileSize ?? 0), 0);
+  const accepted: ImagePicker.ImagePickerAsset[] = [];
+  const rejectedNames: string[] = [];
+
+  next.forEach((asset) => {
+    const size = asset.fileSize ?? 0;
+    if (size && size > MAX_SINGLE_IMAGE_BYTES) {
+      rejectedNames.push(asset.fileName ?? asset.uri);
+      return;
+    }
+    if (size && total + size > MAX_TOTAL_IMAGE_BYTES) {
+      rejectedNames.push(asset.fileName ?? asset.uri);
+      return;
+    }
+    accepted.push(asset);
+    total += size;
+  });
+
+  return { accepted, rejectedNames };
 }
 
 type DateModalProps = {
@@ -312,5 +427,43 @@ const styles = StyleSheet.create({
   modalBtnText: {
     fontFamily: 'Pretendard-SemiBold',
     color: COLORS.text,
+  },
+  imageRow: { alignItems: 'center', gap: 12 },
+  imageWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    position: 'relative',
+    backgroundColor: '#F3F4F6',
+  },
+  imageThumb: { width: '100%', height: '100%' },
+  removeBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeBadgeText: { color: '#FFF', fontSize: 14, fontFamily: 'Pretendard-SemiBold' },
+  addImageButton: {
+    width: 96,
+    height: 96,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  addImageText: {
+    color: COLORS.primary,
+    fontFamily: 'Pretendard-SemiBold',
   },
 });

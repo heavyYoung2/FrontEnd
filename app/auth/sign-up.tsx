@@ -130,6 +130,9 @@ export default function SignUpScreen() {
   const [resendCountdown, setResendCountdown] = useState<number | null>(null);
   const [activeAgreementKey, setActiveAgreementKey] =
     useState<AgreementKey | null>(null);
+  const [sendBusy, setSendBusy] = useState(false);
+  const [sendCooldown, setSendCooldown] = useState(false);
+  const sendCooldownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [toast, setToast] = useState<{ message: string; tone: 'error' | 'info' } | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastAnim = useRef(new Animated.Value(0));
@@ -219,6 +222,7 @@ export default function SignUpScreen() {
   };
 
   const handleSendCode = async () => {
+    if (sendBusy || sendCooldown) return;
     const normalized = email.trim();
     if (!SCHOOL_EMAIL_REGEX.test(normalized)) {
       setEmailFeedback(null);
@@ -229,6 +233,13 @@ export default function SignUpScreen() {
       showToast('학교 이메일(@g.hongik.ac.kr)로 입력해주세요.', 'error');
       return;
     }
+
+    setSendBusy(true);
+    setSendCooldown(true);
+    if (sendCooldownTimer.current) clearTimeout(sendCooldownTimer.current);
+    sendCooldownTimer.current = setTimeout(() => {
+      setSendCooldown(false);
+    }, 1000);
 
     try {
       await requestEmailCode({ email: normalized });
@@ -245,6 +256,8 @@ export default function SignUpScreen() {
       setIsEmailVerified(false);
       setResendCountdown(null);
       showToast(message, 'error');
+    } finally {
+      setSendBusy(false);
     }
   };
 
@@ -412,7 +425,7 @@ export default function SignUpScreen() {
       setCodeFeedback(null);
       showToast('인증 번호 입력 시간이 만료되었습니다. 다시 요청해주세요.', 'error');
     }
-  }, [isEmailVerified, resendCountdown]);
+  }, [isEmailVerified, resendCountdown, showToast]);
 
   useEffect(() => {
     if (!isEmailVerified) {
@@ -425,6 +438,9 @@ export default function SignUpScreen() {
     return () => {
       if (toastTimerRef.current) {
         clearTimeout(toastTimerRef.current);
+      }
+      if (sendCooldownTimer.current) {
+        clearTimeout(sendCooldownTimer.current);
       }
     };
   }, []);
@@ -441,7 +457,8 @@ export default function SignUpScreen() {
   }, [resendCountdown]);
 
   const sendButtonLabel = isCodeSent ? '인증 번호 재발송' : '인증 번호 발송';
-  const sendDisabled = step !== 'email' || isEmailVerified;
+  const sendingCode = sendBusy || sendCooldown;
+  const sendDisabled = step !== 'email' || isEmailVerified || sendingCode;
   const confirmDisabled = step !== 'email' || !code.trim() || isEmailVerified;
   const backDisabled = (step === 'email' && isEmailVerified) || isSubmitting;
 
@@ -584,14 +601,18 @@ export default function SignUpScreen() {
                   onPress={handleSendCode}
                   disabled={sendDisabled}
                 >
-                  <Text
-                    style={[
-                      styles.secondaryActionText,
-                      sendDisabled && styles.secondaryActionTextDisabled,
-                    ]}
-                  >
-                    {sendButtonLabel}
-                  </Text>
+                  {sendingCode ? (
+                    <ActivityIndicator color={COLORS.primary} />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.secondaryActionText,
+                        sendDisabled && styles.secondaryActionTextDisabled,
+                      ]}
+                    >
+                      {sendButtonLabel}
+                    </Text>
+                  )}
                 </Pressable>
               </View>
 
