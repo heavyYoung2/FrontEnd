@@ -20,8 +20,8 @@ import HoebiyoungLogo from '@/src/components/HoebiyoungLogo';
 import { COLORS } from '@/src/design/colors';
 import { useAuth } from '@/src/auth/AuthProvider';
 
-const TEST_EMAIL = 'test@g.hongik.ac.kr';
-const TEST_PASSWORD = '12345678';
+const TEST_EMAIL = 'heavyyoung@g.hongik.ac.kr';
+const TEST_PASSWORD = 'a12345678@';
 
 export default function AuthIndexScreen() {
   const router = useRouter();

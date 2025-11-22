@@ -1,8 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Buffer } from 'buffer';
 import * as SecureStore from 'expo-secure-store';
+import { Alert } from 'react-native';
+import { router } from 'expo-router';
 import { login as requestLogin, logout as requestLogout, LoginPayload } from '@/src/api/auth';
-import { setAuthToken } from '@/src/api/client';
+import { resetUnauthorizedLock, setAuthToken, setUnauthorizedHandler } from '@/src/api/client';
 
 type Role = 'student' | 'council' | null;
 
@@ -144,6 +146,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     })();
   }, []);
 
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      Alert.alert(
+        '로그인이 필요합니다',
+        '세션이 만료되었어요. 다시 로그인해 주세요.',
+        [
+          { text: '취소', style: 'cancel' },
+          {
+            text: '로그인',
+            onPress: async () => {
+              await clearSession();
+              resetUnauthorizedLock();
+              router.replace('/auth');
+            },
+          },
+        ],
+      );
+    });
+  }, []);
+
   const clearSession = async () => {
     try {
       await Promise.all(
@@ -192,6 +214,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setStatus(null);
     setStudentId(response.studentId ?? null);
     setIsAuthenticated(true);
+    resetUnauthorizedLock();
   };
 
   const logout = async () => {
