@@ -161,7 +161,17 @@ export default function StudentMyPageScreen() {
     }
     return '아직 배정받은 사물함이 없습니다.';
   }, [lockerStatusCode, myLocker]);
-  const lockerDisplayNumber = lockerStatusCode === 'NO_RENTAL' ? '대여 정보 없음' : myLocker?.lockerNumber ?? '-';
+  const lockerDisplayNumber = useMemo(() => {
+    const resolvedLockerNumber = myLocker?.lockerNumber ?? myLocker?.lockerName;
+
+    if (lockerStatusCode === 'NO_RENTAL') {
+      return resolvedLockerNumber && resolvedLockerNumber !== '0' ? resolvedLockerNumber : '신청 처리 중';
+    }
+    if (lockerStatusCode === 'RENTAL_REQUESTED') {
+      return resolvedLockerNumber && resolvedLockerNumber !== '0' ? resolvedLockerNumber : '신청 처리 중';
+    }
+    return resolvedLockerNumber ?? '-';
+  }, [lockerStatusCode, myLocker]);
 
   const membershipBadge = feeStatusLoading
     ? { label: '납부 완료', background: COLORS.blue100, color: COLORS.primary }
@@ -190,7 +200,12 @@ export default function StudentMyPageScreen() {
       >
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>나의 사물함</Text>
-          <View style={styles.card}>
+          <View
+            style={[
+              styles.card,
+              lockerStatusCode === 'RENTAL_REQUESTED' && { backgroundColor: '#FEF9C3', borderColor: '#FDE68A' },
+            ]}
+          >
             {lockerError ? (
               <Pressable style={styles.errorBanner} onPress={loadMyPage} hitSlop={6}>
                 <Ionicons name="alert-circle" size={16} color={COLORS.danger} style={{ marginRight: 8 }} />
@@ -211,7 +226,14 @@ export default function StudentMyPageScreen() {
             {!lockerLoading && !lockerError ? (
               <>
                 <View style={styles.cardRow}>
-                  <Text style={styles.lockerId}>{lockerDisplayNumber}</Text>
+                  <Text
+                    style={[
+                      styles.lockerId,
+                      lockerDisplayNumber === '배정 정보 없음' && { color: COLORS.textMuted },
+                    ]}
+                  >
+                    {lockerDisplayNumber}
+                  </Text>
                   <View style={[styles.statusPill, { backgroundColor: lockerBadge.background }]}>
                     <Text style={[styles.statusPillText, { color: lockerBadge.color }]}>{lockerBadge.label}</Text>
                   </View>

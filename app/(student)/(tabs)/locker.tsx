@@ -62,6 +62,12 @@ const STATUS_THEME: Record<string, { bg: string; border: string; text: string; l
     text: COLORS.primary,
     label: '내 사물함',
   },
+  REQUESTED: {
+    bg: '#FEF9C3',
+    border: '#FDE68A',
+    text: '#B45309',
+    label: '신청 처리중',
+  },
   IN_USE: {
     bg: '#E5E7EB',
     border: '#D1D5DB',
@@ -305,14 +311,33 @@ export default function StudentLockerScreen() {
     }
   }, [handleRefresh, loadLocker]);
 
-  const myLockerLabel = useMemo(() => myLocker?.lockerNumber ?? myLocker?.lockerName ?? '-', [myLocker]);
   const rawMyLockerStatus = (myLocker?.lockerRentalStatus ?? myLocker?.status)?.toUpperCase();
+  const myLockerLabel = useMemo(() => {
+    if (rawMyLockerStatus === 'RENTAL_REQUESTED') {
+      return myLocker?.lockerNumber ?? myLocker?.lockerName ?? '신청 처리 중';
+    }
+    return myLocker?.lockerNumber ?? myLocker?.lockerName ?? '배정 정보 없음';
+  }, [myLocker, rawMyLockerStatus]);
   const myStatusKey: keyof typeof STATUS_THEME =
-    rawMyLockerStatus === 'RENTING' ? 'MY' : rawMyLockerStatus === 'RENTAL_REQUESTED' ? 'IN_USE' : 'AVAILABLE';
+    rawMyLockerStatus === 'RENTING'
+      ? 'MY'
+      : rawMyLockerStatus === 'RENTAL_REQUESTED'
+        ? 'REQUESTED'
+        : 'AVAILABLE';
   const canApply = rawMyLockerStatus !== 'RENTING' && rawMyLockerStatus !== 'RENTAL_REQUESTED';
   const applyHelperText = rawMyLockerStatus === 'RENTING'
     ? '이미 사물함을 사용 중입니다.'
     : '현재 사물함 신청이 처리 중입니다.';
+  const myLockerTextColor =
+    myLockerLabel === '배정 정보 없음'
+      ? COLORS.textMuted
+      : rawMyLockerStatus === 'RENTAL_REQUESTED'
+        ? STATUS_THEME.REQUESTED.text
+        : myLocker
+          ? STATUS_THEME[myStatusKey].text
+          : COLORS.text;
+  const myLockerTheme =
+    rawMyLockerStatus === 'RENTAL_REQUESTED' ? STATUS_THEME.REQUESTED : STATUS_THEME[myStatusKey];
 
   const handleApply = () => {
     if (!canApply) {
@@ -390,13 +415,13 @@ export default function StudentLockerScreen() {
             style={[
               styles.myLockerBody,
               {
-                backgroundColor: STATUS_THEME[myStatusKey].bg,
-                borderColor: STATUS_THEME[myStatusKey].border,
+                backgroundColor: myLockerTheme.bg,
+                borderColor: myLockerTheme.border,
               },
             ]}
           >
-            <Text style={[styles.myLockerId, { color: STATUS_THEME[myStatusKey].text }]}>{myLockerLabel}</Text>
-            <Text style={[styles.myLockerStatus, { color: STATUS_THEME[myStatusKey].text }]}>{{
+            <Text style={[styles.myLockerId, { color: myLockerTextColor }]}>{myLockerLabel}</Text>
+            <Text style={[styles.myLockerStatus, { color: myLockerTheme.text }]}>{{
               RENTING: '대여중',
               RENTAL_REQUESTED: '대여 신청 접수',
             }[rawMyLockerStatus as 'RENTING' | 'RENTAL_REQUESTED'] || '신청 가능'}</Text>
@@ -407,7 +432,7 @@ export default function StudentLockerScreen() {
               ? '현재 사용 중인 사물함입니다. 이용 규칙을 꼭 지켜주세요.'
               : rawMyLockerStatus === 'RENTAL_REQUESTED'
                 ? '신청이 접수되어 배정 순서를 기다리고 있습니다.'
-                : '아직 배정받은 사물함이 없습니다. 원하는 구역을 확인해 신청해 보세요.'}
+                : '아직 배정받은 사물함이 없습니다. 공지사항을 확인해 신청해 보세요.'}
           </Text>
         </View>
 
@@ -420,9 +445,20 @@ export default function StudentLockerScreen() {
           </View>
           <View style={styles.legendRow}>
             {statusChips.map(({ key, theme }) => (
-              <View key={key} style={[styles.legendSummaryChip, { borderColor: theme.border }]}>
-                <View style={[styles.legendSummaryDot, { backgroundColor: theme.text }]} />
-                <Text style={[styles.legendSummaryLabel, { color: theme.text }]}>{theme.label}</Text>
+              <View
+                key={key}
+                style={[
+                  styles.legendSummaryChip,
+                  { backgroundColor: theme.bg, borderColor: theme.border },
+                ]}
+              >
+                <Text
+                  numberOfLines={1}
+                  ellipsizeMode="clip"
+                  style={[styles.legendSummaryLabel, { color: theme.text }]}
+                >
+                  {theme.label}
+                </Text>
               </View>
             ))}
           </View>
@@ -502,8 +538,8 @@ function LockerSectionModal({ section, visible, onClose, state, onReload }: Sect
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <View style={styles.modalCard}>
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{section} 구역 사물함</Text>
             <Pressable onPress={onClose} hitSlop={10} style={styles.modalCloseBtn}>
@@ -565,8 +601,8 @@ function LockerSectionModal({ section, visible, onClose, state, onReload }: Sect
               </View>
             </ScrollView>
           )}
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
@@ -679,35 +715,28 @@ const styles = StyleSheet.create({
   },
   legendRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     justifyContent: 'space-between',
-    gap: 8,
-    paddingHorizontal: 4,
+    columnGap: 4,
+    paddingHorizontal: 0,
   },
   legendSummaryChip: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 16,
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 999,
     borderWidth: 1,
-    backgroundColor: '#F9FAFB',
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 1,
-  },
-  legendSummaryDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    minWidth: 72,
+    flex: 1,
+    flexBasis: '24%',
   },
   legendSummaryLabel: {
     fontFamily: 'Pretendard-SemiBold',
-    fontSize: 13,
+    fontSize: 12,
+    textAlign: 'center',
+    flexShrink: 1,
   },
   legendChip: {
     flex: 1,

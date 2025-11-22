@@ -574,6 +574,13 @@ function DateInput({
   onChange: (next: Date) => void;
 }) {
   const [showPicker, setShowPicker] = useState(false);
+  const [tempDate, setTempDate] = useState(value);
+
+  useEffect(() => {
+    if (!showPicker) {
+      setTempDate(value);
+    }
+  }, [showPicker, value]);
 
   const handleChange = (_event: any, nextDate?: Date) => {
     setShowPicker(false);
@@ -584,20 +591,60 @@ function DateInput({
     <View style={styles.dateInputWrap}>
       <Text style={styles.dateInputLabel}>{label}</Text>
       <Pressable
-        onPress={() => setShowPicker(true)}
+        onPress={() => {
+          setTempDate(value);
+          setShowPicker(true);
+        }}
         style={({ pressed }) => [styles.dateInputBtn, pressed && { opacity: 0.9 }]}
       >
         <Ionicons name="calendar-outline" size={18} color={COLORS.primary} />
         <Text style={styles.dateInputValue}>{formatDateTime(value)}</Text>
       </Pressable>
 
-      {showPicker && (
+      {Platform.OS !== 'ios' && showPicker && (
         <DateTimePicker
           value={value}
           mode="datetime"
-          display={Platform.OS === 'ios' ? 'compact' : 'default'}
+          display="default"
           onChange={handleChange}
         />
+      )}
+
+      {Platform.OS === 'ios' && showPicker && (
+        <Modal transparent animationType="fade">
+          <View style={styles.pickerContainer}>
+            <Pressable style={styles.pickerBackdrop} onPress={() => setShowPicker(false)} />
+            <View style={styles.pickerSheet}>
+              <DateTimePicker
+                value={tempDate}
+                mode="datetime"
+                display="spinner"
+                onChange={(_, nextDate) => nextDate && setTempDate(nextDate)}
+              />
+              <View style={styles.pickerActions}>
+                <Pressable
+                  onPress={() => setShowPicker(false)}
+                  style={({ pressed }) => [styles.pickerActionBtn, pressed && { opacity: 0.85 }]}
+                >
+                  <Text style={styles.pickerActionText}>취소</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    onChange(tempDate);
+                    setShowPicker(false);
+                  }}
+                  style={({ pressed }) => [
+                    styles.pickerActionBtn,
+                    styles.pickerActionPrimary,
+                    pressed && { opacity: 0.9 },
+                  ]}
+                >
+                  <Text style={[styles.pickerActionText, styles.pickerActionPrimaryText]}>확인</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       )}
     </View>
   );
@@ -1338,6 +1385,54 @@ const styles = StyleSheet.create({
     fontFamily: 'Pretendard-Medium',
     fontSize: 13,
     color: COLORS.text,
+  },
+  pickerContainer: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+  },
+  pickerSheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 16,
+    gap: 12,
+    shadowColor: '#000000',
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: -2 },
+    elevation: 8,
+  },
+  pickerActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  pickerActionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  pickerActionText: {
+    fontFamily: 'Pretendard-SemiBold',
+    color: COLORS.text,
+  },
+  pickerActionPrimary: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  pickerActionPrimaryText: {
+    color: '#FFFFFF',
   },
   toggleRow: {
     flexDirection: 'row',

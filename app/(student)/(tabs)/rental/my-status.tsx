@@ -129,14 +129,24 @@ export default function StudentRentalStatusScreen() {
           <Text style={styles.penaltyBody}>1주 이상 연체 시 · 영구 정지</Text>
         </View>
 
-        <Pressable
-          style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
-          onPress={() => router.back()}
-          hitSlop={6}
-        >
-          <Ionicons name="arrow-back" size={16} color={COLORS.text} style={{ marginRight: 6 }} />
-          <Text style={styles.backBtnText}>뒤로가기</Text>
-        </Pressable>
+        <View style={styles.actionsRow}>
+          <Pressable
+            style={({ pressed }) => [styles.backBtn, pressed && styles.backBtnPressed]}
+            onPress={() => router.back()}
+            hitSlop={6}
+          >
+            <Ionicons name="arrow-back" size={16} color={COLORS.text} style={{ marginRight: 6 }} />
+            <Text style={styles.backBtnText}>뒤로가기</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.historyBtn, pressed && styles.historyBtnPressed]}
+            onPress={() => router.push('/(student)/rental-history')}
+            hitSlop={6}
+          >
+            <Ionicons name="list" size={16} color={COLORS.primary} style={{ marginRight: 6 }} />
+            <Text style={styles.historyBtnText}>전체 대여 내역 조회하기</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -301,10 +311,15 @@ const styles = StyleSheet.create({
     ...TYPO.bodySm,
     color: '#FFFFFF',
   },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
   backBtn: {
-    alignSelf: 'flex-start',
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 18,
     paddingVertical: 12,
     borderRadius: 14,
@@ -319,6 +334,26 @@ const styles = StyleSheet.create({
     fontFamily: 'Pretendard-SemiBold',
     fontSize: 14,
     color: COLORS.text,
+  },
+  historyBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    backgroundColor: '#EEF2FF',
+  },
+  historyBtnPressed: {
+    opacity: 0.9,
+  },
+  historyBtnText: {
+    fontFamily: 'Pretendard-SemiBold',
+    fontSize: 14,
+    color: COLORS.primary,
   },
   errorCard: {
     padding: 18,

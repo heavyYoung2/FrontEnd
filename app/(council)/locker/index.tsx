@@ -89,12 +89,6 @@ const STATUS_THEME: Record<string, { bg: string; border: string; text: string; l
     text: COLORS.danger,
     label: '사용 불가',
   },
-  MY: {
-    bg: '#DBEAFE',
-    border: '#BFDBFE',
-    text: COLORS.primary,
-    label: '내 사물함',
-  },
 };
 
 export default function LockerTab() {
@@ -151,14 +145,13 @@ export default function LockerTab() {
       (acc, section) => {
         const state = sectionStates[section];
         if (!state || state.status !== 'loaded') return acc;
-        acc.my += state.counts.my;
         acc.inUse += state.counts.inUse;
         acc.available += state.counts.available;
         acc.broken += state.counts.broken;
-        acc.total += state.counts.my + state.counts.inUse + state.counts.available + state.counts.broken;
+        acc.total += state.counts.inUse + state.counts.available + state.counts.broken;
         return acc;
       },
-      { total: 0, my: 0, inUse: 0, available: 0, broken: 0 },
+      { total: 0, inUse: 0, available: 0, broken: 0 },
     );
   }, [sectionStates]);
 
@@ -171,7 +164,8 @@ export default function LockerTab() {
       nextStatus: LockerStatusApi,
       owner?: { studentId?: string; studentName?: string } | null,
     ) => {
-      const normalizedStatus = (nextStatus ?? 'AVAILABLE').toUpperCase() as LockerStatusApi;
+      const normalizedStatusRaw = (nextStatus ?? 'AVAILABLE').toUpperCase() as LockerStatusApi;
+      const normalizedStatus = normalizedStatusRaw === 'MY' ? 'IN_USE' : normalizedStatusRaw;
       setSectionStates((prev) => {
         const state = prev[section];
         if (!state || state.status !== 'loaded') return prev;
@@ -179,7 +173,7 @@ export default function LockerTab() {
         const lockers = state.lockers.map((locker) => {
           if (locker.id !== lockerId) return locker;
           const next: LockerItem = { ...locker, status: normalizedStatus };
-          if (normalizedStatus === 'IN_USE' || normalizedStatus === 'MY') {
+          if (normalizedStatus === 'IN_USE') {
             next.studentId = owner?.studentId ?? locker.studentId;
             next.studentName = owner?.studentName ?? locker.studentName;
           } else {
@@ -339,12 +333,19 @@ export default function LockerTab() {
             </Text>
           </View>
           <View style={styles.legendRow}>
-            {['MY', 'IN_USE', 'AVAILABLE', 'BROKEN'].map((key) => {
+            {['IN_USE', 'AVAILABLE', 'BROKEN'].map((key) => {
               const theme = STATUS_THEME[key];
               return (
-                <View key={key} style={[styles.legendSummaryChip, { borderColor: theme.border }]}>
-                  <View style={[styles.legendSummaryDot, { backgroundColor: theme.text }]} />
-                  <Text style={[styles.legendSummaryLabel, { color: theme.text }]}>{theme.label}</Text>
+                <View
+                  key={key}
+                  style={[
+                    styles.legendSummaryChip,
+                    { backgroundColor: theme.bg, borderColor: theme.border },
+                  ]}
+                >
+                  <Text numberOfLines={1} ellipsizeMode="clip" style={[styles.legendSummaryLabel, { color: theme.text }]}>
+                    {theme.label}
+                  </Text>
                 </View>
               );
             })}
@@ -365,7 +366,7 @@ export default function LockerTab() {
               <View style={styles.sectionHeaderRow}>
                 <Text style={styles.sectionName}>{section} 구역</Text>
                 <Text style={styles.sectionTotal}>
-                  {status === 'loaded' ? `${counts.inUse + counts.available + counts.broken + counts.my}칸` : '미확인'}
+                  {status === 'loaded' ? `${counts.inUse + counts.available + counts.broken}칸` : '미확인'}
                 </Text>
               </View>
               <View style={styles.sectionStack}>
@@ -378,11 +379,6 @@ export default function LockerTab() {
                 <Text style={[styles.sectionStat, { color: STATUS_THEME.BROKEN.text }]}>
                   불가 {counts.broken}
                 </Text>
-                {counts.my > 0 && (
-                  <Text style={[styles.sectionStat, { color: STATUS_THEME.MY.text }]}>
-                    내 사물함 {counts.my}
-                  </Text>
-                )}
                 {status === 'loading' && (
                   <View style={styles.sectionLoadingRow}>
                     <ActivityIndicator size="small" color={COLORS.primary} />
@@ -452,8 +448,8 @@ function LockerSectionModal({
   ) => void;
   onLoginRedirect: () => void;
 }) {
-  const themeKeys = ['MY', 'IN_USE', 'AVAILABLE', 'BROKEN'] as const;
-  const statusActions = ['MY', 'IN_USE', 'AVAILABLE', 'BROKEN'] as const;
+  const themeKeys = ['IN_USE', 'AVAILABLE', 'BROKEN'] as const;
+  const statusActions = ['IN_USE', 'AVAILABLE', 'BROKEN'] as const;
   const [selectedLocker, setSelectedLocker] = useState<LockerItem | null>(null);
   const [savingStatus, setSavingStatus] = useState(false);
   const [statusModalVisible, setStatusModalVisible] = useState(false);
@@ -602,8 +598,8 @@ function LockerSectionModal({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}>
-        <View style={styles.modalCard}>
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{section} 구역 사물함</Text>
             <Pressable onPress={onClose} hitSlop={10} style={styles.modalCloseBtn}>
@@ -612,11 +608,17 @@ function LockerSectionModal({
           </View>
 
           <View style={styles.modalLegend}>
-            {themeKeys.map((key) => {
+            {['IN_USE', 'AVAILABLE', 'BROKEN'].map((key) => {
               const theme = STATUS_THEME[key];
               return (
                 <View key={key} style={[styles.legendChip, { backgroundColor: theme.bg, borderColor: theme.border }]}>
-                  <Text style={[styles.legendText, { color: theme.text }]}>{theme.label}</Text>
+                  <Text
+                    numberOfLines={1}
+                    ellipsizeMode="clip"
+                    style={[styles.legendText, { color: theme.text }]}
+                  >
+                    {theme.label}
+                  </Text>
                 </View>
               );
             })}
@@ -685,8 +687,8 @@ function LockerSectionModal({
               </View>
             </ScrollView>
           )}
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
 
       <Modal visible={statusModalVisible} animationType="fade" transparent onRequestClose={() => setStatusModalVisible(false)}>
         <View style={styles.statusModalBackdrop}>
@@ -785,10 +787,8 @@ function normalizeLockers(raw: LockerInfoApi[], _section: SectionId): LockerItem
 
       if (statusUpper === 'BROKEN' || statusUpper === 'CANT_USE' || statusUpper === 'UNAVAILABLE') {
         base.status = 'BROKEN';
-      } else if (statusUpper === 'IN_USE') {
+      } else if (statusUpper === 'IN_USE' || statusUpper === 'MY') {
         base.status = 'IN_USE';
-      } else if (statusUpper === 'MY') {
-        base.status = 'MY';
       } else {
         base.status = 'AVAILABLE';
       }
@@ -803,8 +803,7 @@ function summarizeLockers(lockers: LockerItem[]) {
   return lockers.reduce(
     (acc, locker) => {
       const status = locker.status.toUpperCase();
-      if (status === 'IN_USE') acc.inUse += 1;
-      else if (status === 'MY') acc.my += 1;
+      if (status === 'IN_USE' || status === 'MY') acc.inUse += 1;
       else if (status === 'AVAILABLE') acc.available += 1;
       else if (status === 'BROKEN' || status === 'CANT_USE' || status === 'UNAVAILABLE') acc.broken += 1;
       return acc;
@@ -877,34 +876,28 @@ const styles = StyleSheet.create({
   },
   legendRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: 10,
+    rowGap: 10,
+    paddingHorizontal: 8,
+    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
-    paddingHorizontal: 4,
   },
   legendSummaryChip: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 16,
+    paddingHorizontal: 16,
+    borderRadius: 999,
     borderWidth: 1,
-    backgroundColor: '#F9FAFB',
-    shadowColor: '#0F172A',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 1,
-  },
-  legendSummaryDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    flexShrink: 0,
+    minWidth: 96,
   },
   legendSummaryLabel: {
     fontFamily: 'Pretendard-SemiBold',
     fontSize: 13,
+    flexShrink: 0,
   },
   legendChip: {
     flex: 1,
@@ -1093,8 +1086,8 @@ const styles = StyleSheet.create({
   },
   statusActionButtons: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
+    alignItems: 'center',
   },
   statusTextInput: {
     borderWidth: 1,
@@ -1108,8 +1101,7 @@ const styles = StyleSheet.create({
   },
   statusActionButton: {
     flex: 1,
-    minWidth: 140,
-    flexBasis: '48%',
+    minWidth: 0,
     paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1,

@@ -29,6 +29,7 @@ import {
 type RentalRecord = {
   id: string;
   rentalHistoryId: number | null;
+  itemCategoryId: number | null;
   category: string;
   itemName: string;
   renterName: string;
@@ -82,9 +83,20 @@ const STATUS_FILTERS = [
 
 type StatusFilterKey = (typeof STATUS_FILTERS)[number]['key'];
 
-type CategoryFilterKey = string;
-
-const DEFAULT_CATEGORY_FILTERS = ['전체', '보조배터리', '장우산', '노트북 충전기'];
+type CategoryFilterKey = number | null;
+type CategoryOption = { id: CategoryFilterKey; label: string };
+const ALL_CATEGORY_ID: CategoryFilterKey = null;
+const CATEGORY_LABEL_BY_ID: Record<number, string> = {
+  1: '보조배터리',
+  2: '노트북 충전기',
+  3: '장우산',
+};
+const CATEGORY_OPTIONS: CategoryOption[] = [
+  { id: ALL_CATEGORY_ID, label: '전체' },
+  { id: 1, label: CATEGORY_LABEL_BY_ID[1] },
+  { id: 2, label: CATEGORY_LABEL_BY_ID[2] },
+  { id: 3, label: CATEGORY_LABEL_BY_ID[3] },
+];
 
 const mapHistoryToRecord = (history: AdminRentalHistory): RentalRecord => {
   const identifier =
@@ -98,11 +110,14 @@ const mapHistoryToRecord = (history: AdminRentalHistory): RentalRecord => {
         ].join('-');
 
   const rawCategory = history.itemCategoryName?.trim() ?? '';
-  const normalizedCategory = rawCategory === '기타' ? '' : rawCategory;
+  const normalizedCategory = rawCategory === '기타' ? '' : rawCategory || '기타';
+  const categoryLabel =
+    (history.itemCategoryId != null && CATEGORY_LABEL_BY_ID[history.itemCategoryId]) || normalizedCategory;
   return {
     id: identifier,
     rentalHistoryId: history.rentalHistoryId,
-    category: normalizedCategory,
+    itemCategoryId: history.itemCategoryId,
+    category: categoryLabel,
     itemName: history.itemName,
     renterName: history.renterName,
     renterId: history.renterStudentId,
@@ -116,7 +131,7 @@ const mapHistoryToRecord = (history: AdminRentalHistory): RentalRecord => {
 export default function RentalOverviewScreen() {
   const [records, setRecords] = useState<RentalRecord[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilterKey>('all');
-  const [categoryFilter, setCategoryFilter] = useState<CategoryFilterKey>('전체');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilterKey>(ALL_CATEGORY_ID);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
@@ -154,19 +169,11 @@ export default function RentalOverviewScreen() {
     setRefreshing(false);
   }, [loadRecords]);
 
-  const categoryOptions = useMemo(() => {
-    const dynamic = Array.from(
-      new Set(records.map((record) => record.category?.trim()).filter((cat): cat is string => Boolean(cat))),
-    ).filter((cat) => cat !== '기타');
-    dynamic.sort((a, b) => a.localeCompare(b, 'ko-KR'));
-    const extras = dynamic.filter((cat) => !DEFAULT_CATEGORY_FILTERS.includes(cat));
-    return [...DEFAULT_CATEGORY_FILTERS, ...extras];
-  }, [records]);
+  const categoryOptions = CATEGORY_OPTIONS;
 
   useEffect(() => {
-    if (categoryFilter === '전체') return;
-    if (!categoryOptions.includes(categoryFilter)) {
-      setCategoryFilter('전체');
+    if (!categoryOptions.some((option) => option.id === categoryFilter)) {
+      setCategoryFilter(ALL_CATEGORY_ID);
     }
   }, [categoryFilter, categoryOptions]);
 
@@ -174,7 +181,7 @@ export default function RentalOverviewScreen() {
     const keyword = searchTerm.trim().toLowerCase();
     return records.filter((record) => {
       if (statusFilter !== 'all' && record.status !== statusFilter) return false;
-      if (categoryFilter !== '전체' && record.category !== categoryFilter) return false;
+      if (categoryFilter !== ALL_CATEGORY_ID && record.itemCategoryId !== categoryFilter) return false;
       if (selectedDate && !matchesSelectedDate(record.rentDate, selectedDate)) return false;
       if (keyword) {
         const target = `${record.itemName} ${record.renterName} ${record.renterId} ${record.category}`.toLowerCase();
@@ -241,15 +248,15 @@ export default function RentalOverviewScreen() {
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
             {categoryOptions.map((category) => {
-              const active = categoryFilter === category;
+              const active = categoryFilter === category.id;
               return (
                 <Pressable
-                  key={category}
-                  onPress={() => setCategoryFilter(category)}
+                  key={`${category.id ?? 'all'}-${category.label}`}
+                  onPress={() => setCategoryFilter(category.id)}
                   style={[styles.categoryChip, active && styles.categoryChipActive]}
                 >
                   <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
-                    {category}
+                    {category.label}
                   </Text>
                 </Pressable>
               );

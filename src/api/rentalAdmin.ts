@@ -72,6 +72,7 @@ export type AdminRentalStatus = 'IN_PROGRESS' | 'OVERDUE' | 'RETURNED' | 'CANCEL
 export type AdminRentalHistory = {
   rentalHistoryId: number | null;
   itemName: string;
+  itemCategoryId: number | null;
   itemCategoryName: string;
   renterName: string;
   renterStudentId: string;
@@ -105,6 +106,7 @@ const normalizeAdminRentalHistory = (input: unknown): AdminRentalHistory => {
   if (!input || typeof input !== 'object') {
     return {
       rentalHistoryId: null,
+      itemCategoryId: null,
       itemName: '알 수 없는 물품',
       itemCategoryName: '기타',
       renterName: '알 수 없음',
@@ -119,6 +121,7 @@ const normalizeAdminRentalHistory = (input: unknown): AdminRentalHistory => {
   const record = input as Record<string, unknown>;
   return {
     rentalHistoryId: toNullableNumber(record.rentalHistoryId),
+    itemCategoryId: toNullableNumber(record.itemCategoryId ?? (record.itemCategory as Record<string, unknown>)?.id),
     itemName: toNullableString(record.itemName) ?? '알 수 없는 물품',
     itemCategoryName:
       toNullableString(record.itemCategoryName ?? record.categoryName ?? record.itemCategory)?.trim() ?? '기타',
