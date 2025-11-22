@@ -69,17 +69,22 @@ export default function CouncilHeader({
     }
   };
 
+  const handleIdentityPress = () => {
+    const target = role === 'council' ? '/(council)/mypage' : '/(student)/(tabs)/mypage';
+    router.push(target);
+  };
+
   return (
     <View style={[styles.wrap, withBottomBorder && styles.border, containerStyle]}>
       {/* ① 학생회+학번 라인 (항상 최상단) */}
-      <View style={styles.identity}>
+      <Pressable style={styles.identity} onPress={handleIdentityPress} hitSlop={8}>
         {resolvedBadgeLabel ? (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{resolvedBadgeLabel}</Text>
           </View>
         ) : null}
         <Text style={styles.studentId}>{resolvedStudentId}</Text>
-      </View>
+      </Pressable>
 
       {/* ② 페이지 헤더 라인 (제목/뒤로가기/우측액션) */}
       {(title || showBack || right) && (
@@ -118,6 +123,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 8,
+    borderRadius: 10,
   },
   badge: {
     backgroundColor: COLORS.primary,
