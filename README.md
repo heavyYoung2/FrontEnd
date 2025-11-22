@@ -18,6 +18,54 @@
 - 설정 허브: 역할 전환, 가이드, 비밀번호 변경 등 추가 화면으로 확장 가능한 메뉴 제공
 - 디자인 토큰: `src/design/colors.ts`, `src/design/typography.ts`로 색상·타이포 일관성 유지
 
+## 역할별/탭별 기능 상세
+학생회(관리자)와 학생 뷰는 동일한 탭 5개(`qr`, `rental`, `index`, `locker`, `mypage`)를 공유하며, `HBTabBar`가 순서/아이콘/중앙 플로팅 버튼을 단일 소스로 관리합니다. 아래는 탭별 상세 동작과 주요 화면입니다.
+
+### 학생회 (관리자)
+- QR (`app/(council)/qr.tsx`)
+  - 학생 앱 QR 스캔 → 학생회비 납부 여부 검증(`src/screens/StudentFeeQrScanner`), 승인/미승인/에러 상태별 음성·배지·버튼 라벨 대응
+- 물품 (`app/(council)/rental/*`)
+  - 대시보드(`rental/index.tsx`): 카테고리별 총수량/대여중 수량, 대여/반납 액션 진입, 물품 관리 모달
+  - 스캔(`rental/scan.tsx`, `src/screens/RentalQrScanner.tsx`): 학생 QR로 대여 처리, 에러 코드별 친절 메시지
+  - 반납 스캔(`rental/return.tsx`, `src/screens/ReturnQrScanner.tsx`): 학생 QR로 즉시 반납 처리
+  - 내역/필터(`rental/overview.tsx`): 상태(대여중/연체/반납완료/취소), 카테고리, 검색어, 특정 날짜 필터 + 수동 반납 처리
+  - 종류 추가(`rental/add.tsx`): 새 카테고리 생성 후 대시보드로 리다이렉트
+- 달력/공지 (`app/(council)/index.tsx`, `app/notice/*`)
+  - 공지 리스트 + 작성/수정/삭제, `notice/calendar.tsx`에서 월별 이벤트 멀티 마킹, 상세/작성/수정 라우트 연결
+- 사물함 (`app/(council)/locker/*`)
+  - 대시보드(`locker/index.tsx`): 구역별 사용중/가능/불가 수량, 상태 변경(사용 가능/사용중/고장), 학기 일괄 반납
+  - 신청 일정 관리(`locker/applications.tsx`): 일정 생성, 신청 마감, 자동 배정, 신청자 목록·신청 시간 표시
+  - 배정 내역(`locker/history.tsx`): 학기 선택 후 구역별 배정 테이블 뷰
+- 마이/설정 (`app/(council)/mypage.tsx`, `app/settings/*`)
+  - 학생회 인원 관리, 비밀번호 변경, 가이드, 로그아웃/탈퇴, 학생 뷰로 전환 스위치 (`settings-home.tsx` 내부)
+
+### 학생
+- QR (`app/(student)/(tabs)/qr.tsx`)
+  - 학생회비 납부 상태를 포함한 QR 발급(30초 만료 타이머), 만료 오버레이/재발급, 미납 안내 토스트
+- 물품 (`app/(student)/(tabs)/rental/*`)
+  - 대여 대시보드(`rental/index.tsx`): 대여 가능 품목 목록, 잔여 수량, 블랙리스트/경고 안내
+  - 대여 QR 발급(`rent-item.tsx`): 카테고리별 QR 생성, 학생회비 납부 배지, 만료 타이머
+  - 반납 QR 발급(`return-item.tsx`): 활성 대여 목록에서 선택 후 QR 발급, 연체 배지/메타 표시
+  - 내 대여 현황(`my-status.tsx`), 전체 대여 내역(`rental-history.tsx`), 안내(`guides.tsx`)
+- 달력/공지 (`app/(student)/(tabs)/index.tsx`, `app/notice/*`)
+  - 공지 리스트/상세 읽기, 달력 진입(작성·수정은 비활성)
+- 사물함 (`app/(student)/(tabs)/locker.tsx`)
+  - 나의 사물함 상태/배정 정보, 신청 버튼(중복 신청 방지), 구역별 현황 모달에서 상태·배정자 정보 확인
+- 마이/설정 (`app/(student)/(tabs)/mypage.tsx`, `app/(student)/settings/*`)
+  - 내 대여/사물함/블랙리스트/학생회비 상태를 한 번에 확인, 비밀번호 변경, 알림/가이드, 로그아웃 등
+
+## 공통 컴포넌트/토대
+- `HBTabBar`(`src/components/HBTabBar.tsx`): 두 스택의 탭 순서/아이콘/레이블 중앙 관리, 중앙 플로팅 버튼 강조
+- `CouncilHeader`: 배지/학번/타이틀/백버튼/우측 액션 공통 헤더
+- 디자인 토큰: `src/design/colors.ts`, `src/design/typography.ts` (Pretendard 폰트 기준)
+- API 레이어: `src/api/*` 도메인 서비스, Axios 인터셉터, 플랫폼별 기본 URL 분기
+
+## 공통 컴포넌트/토대
+- `HBTabBar`: 학생회·학생 탭바를 단일 소스에서 관리, 중앙 플로팅 버튼 포함
+- `CouncilHeader`: 상단 헤더(배지/학번/뒤로가기/우측 액션) 공통화
+- 디자인 토큰: `src/design/colors.ts`, `src/design/typography.ts`
+- API 레이어: `src/api/*` 도메인 서비스와 공통 인터셉터, 플랫폼별 기본 URL 분기
+
 ## 디렉터리 맵
 ```text
 app/
