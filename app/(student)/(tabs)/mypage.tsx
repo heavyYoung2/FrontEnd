@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import CouncilHeader from '@/components/CouncilHeader';
+import FloatingHelpButtons from '@/components/FloatingHelpButtons';
 import { COLORS } from '@/src/design/colors';
 import { TYPO } from '@/src/design/typography';
 import { ActiveRental } from '@/src/features/rental/hooks';
@@ -406,23 +407,11 @@ export default function StudentMyPageScreen() {
         </View>
       </ScrollView>
 
-      <View style={[styles.fabColumn, { bottom: bottomInset + 104 }]}>
-        <Pressable
-          hitSlop={10}
-          onPress={() => router.push('/(student)/settings')}
-          style={({ pressed }) => [styles.fabButton, pressed && { opacity: 0.95 }]}
-        >
-          <Ionicons name="settings-outline" size={20} color={COLORS.primary} />
-        </Pressable>
-
-        <Pressable
-          hitSlop={10}
-          onPress={() => router.push('/(student)/settings/guide')}
-          style={({ pressed }) => [styles.fabButton, pressed && { opacity: 0.95 }]}
-        >
-          <Ionicons name="help-circle-outline" size={20} color={COLORS.primary} />
-        </Pressable>
-      </View>
+      <FloatingHelpButtons
+        offset={104}
+        onPressSettings={() => router.push('/(student)/settings')}
+        onPressGuide={() => router.push('/(student)/settings/guide')}
+      />
     </SafeAreaView>
   );
 }
@@ -632,26 +621,6 @@ const styles = StyleSheet.create({
   warningTextError: {
     color: COLORS.danger,
     flex: 1,
-  },
-  fabColumn: {
-    position: 'absolute',
-    right: 20,
-    bottom: 32,
-    gap: 12,
-  },
-  fabButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
   },
   errorBanner: {
     flexDirection: 'row',

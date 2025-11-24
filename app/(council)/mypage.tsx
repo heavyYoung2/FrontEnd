@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '../../src/design/colors';
 import { TYPO } from '../../src/design/typography';
-import { Ionicons } from '@expo/vector-icons';
+import FloatingHelpButtons from '@/components/FloatingHelpButtons';
 
 export default function CouncilMyPageScreen() {
   const router = useRouter();
@@ -35,23 +35,10 @@ export default function CouncilMyPageScreen() {
           </Pressable>
         </View>
 
-        <View style={styles.fabColumn}>
-          <Pressable
-            onPress={() => router.push('/settings/settings-home')}
-            style={({ pressed }) => [styles.fabButton, pressed && { opacity: 0.95 }]}
-            hitSlop={10}
-          >
-            <Ionicons name="settings-outline" size={20} color={COLORS.primary} />
-          </Pressable>
-
-          <Pressable
-            onPress={() => router.push('/settings/guide')}
-            style={({ pressed }) => [styles.fabButton, pressed && { opacity: 0.95 }]}
-            hitSlop={10}
-          >
-            <Ionicons name="help-circle-outline" size={20} color={COLORS.primary} />
-          </Pressable>
-        </View>
+        <FloatingHelpButtons
+          onPressSettings={() => router.push('/settings/settings-home')}
+          onPressGuide={() => router.push('/settings/guide')}
+        />
       </View>
     </SafeAreaView>
   );
@@ -98,27 +85,5 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontFamily: 'Pretendard-SemiBold',
     fontSize: 14,
-  },
-  fabColumn: {
-    position: 'absolute',
-    right: 24,
-    top: 500,
-    alignItems: 'center',
-    gap: 12,
-  },
-  fabButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
   },
 });

@@ -35,6 +35,8 @@ const COLORS = {
   pill: '#9FE29F',
 };
 
+const EVENT_COLORS = ['#9FE29F', '#5CB2FF', '#FF8B8B', '#FFD166', '#B28BFF', '#4ADE80'];
+
 type Marked = {
   [date: string]: {
     selected?: boolean;
@@ -93,16 +95,26 @@ export default function CouncilCalendarScreen() {
     }, [load, month])
   );
 
+  const eventColors = useMemo<Record<string, string>>(
+    () =>
+      events.reduce<Record<string, string>>((acc, ev, index) => {
+        acc[String(ev.eventId)] = EVENT_COLORS[index % EVENT_COLORS.length];
+        return acc;
+      }, {}),
+    [events],
+  );
+
   const markedDates: Marked = useMemo(() => {
     const map: Marked = {};
     events.forEach((ev) => {
       const days = eachDay(ev.eventStartDate, ev.eventEndDate);
+      const color = eventColors[String(ev.eventId)] || COLORS.pill;
       days.forEach((d, i) => {
         const isStart = i === 0;
         const isEnd = i === days.length - 1;
         if (!map[d]) map[d] = { periods: [] };
         map[d].periods!.push({
-          color: COLORS.pill,
+          color,
           ...(isStart ? { startingDay: true } : {}),
           ...(isEnd ? { endingDay: true } : {}),
         });
@@ -193,7 +205,7 @@ export default function CouncilCalendarScreen() {
                 }
                 style={({ pressed }) => [styles.itemRow, pressed && { opacity: 0.95 }]}
               >
-                <View style={styles.dot} />
+                <View style={[styles.dot, { backgroundColor: eventColors[String(ev.eventId)] || COLORS.pill }]} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.itemTitle}>{ev.title}</Text>
                   <Text style={styles.itemSub}>

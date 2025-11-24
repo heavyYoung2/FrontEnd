@@ -14,7 +14,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -85,6 +85,7 @@ function toApplicationSchedule(item: LockerApplicationInfoApi): ApplicationSched
 
 export default function LockerApplicationsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [schedules, setSchedules] = useState<ApplicationSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -206,28 +207,29 @@ export default function LockerApplicationsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-        <View style={{ flex: 1 }}>
-          <CouncilHeader
-            studentId="C246120"
-            title="사물함 신청 관리"
-            showBack
-            backFallbackHref="/(council)/locker"
-          />
+      <View style={{ flex: 1 }}>
+        <CouncilHeader
+          studentId="C246120"
+          title="사물함 신청 관리"
+          showBack
+          backFallbackHref="/(council)/locker"
+        />
 
-          <ScrollView
-            contentContainerStyle={styles.scroll}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            refreshControl={(
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-                tintColor={COLORS.primary}
-                colors={[COLORS.primary]}
-              />
-            )}
-          >
+        <ScrollView
+          style={styles.scrollArea}
+          contentContainerStyle={[styles.scroll, { paddingBottom: 140 + insets.bottom }]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          refreshControl={(
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={COLORS.primary}
+              colors={[COLORS.primary]}
+            />
+          )}
+        >
         <Pressable
           onPress={() => setCreateVisible(true)}
           style={({ pressed }) => [styles.createBtn, pressed && { opacity: 0.9 }]}
@@ -333,9 +335,8 @@ export default function LockerApplicationsScreen() {
             </View>
           );
         })}
-          </ScrollView>
-        </View>
-      </TouchableWithoutFeedback>
+        </ScrollView>
+      </View>
 
       <CreateScheduleModal
         visible={createVisible}
@@ -756,8 +757,8 @@ function ScheduleDetailModal({
       visible={!!schedule}
       onRequestClose={onClose}
     >
-      <View style={styles.modalBackdrop}>
-        <View style={styles.modalCard}>
+      <Pressable style={styles.modalBackdrop} onPress={onClose}>
+        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{schedule.semester} 신청 상세</Text>
             <View style={styles.modalHeaderActions}>
@@ -901,8 +902,8 @@ function ScheduleDetailModal({
               <Text style={styles.modalConfirmText}>닫기</Text>
             </Pressable>
           </ScrollView>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
@@ -946,9 +947,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFF',
   },
+  scrollArea: {
+    flex: 1,
+  },
   scroll: {
+    flexGrow: 1,
     padding: 20,
-    paddingBottom: 120,
     gap: 18,
   },
   createBtn: {
