@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -9,56 +11,84 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import CouncilHeader from '@/components/CouncilHeader';
 import { COLORS } from '../../../src/design/colors';
 import { TYPO } from '../../../src/design/typography';
+import { changePassword } from '@/src/api/auth';
+import { useAuth } from '@/src/auth/AuthProvider';
 
-type Step = 'email' | 'code' | 'new' | 'done';
+type Step = 'form' | 'done';
+const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[!@#$%^&*()_+=-]).{8,}$/;
 
 export default function StudentPasswordScreen() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>('email');
-  const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
+  const { logout } = useAuth();
+  const [step, setStep] = useState<Step>('form');
+  const [originPw, setOriginPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [showOrigin, setShowOrigin] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
-  const disabledColor = '#F3F4F6';
+  const passwordGuide = useMemo(
+    () => '8자 이상, 영문/숫자/특수문자 각각 1개 이상 포함',
+    [],
+  );
 
-  const goNextFromEmail = () => {
-    if (!email.includes('@')) {
-      Alert.alert('확인', '학교 이메일을 입력해주세요.');
+  const getErrorMessage = useCallback((error: unknown, fallback: string) => {
+    const resMessage =
+      typeof error === 'object' &&
+      error !== null &&
+      'response' in error &&
+      typeof (error as any).response?.data?.message === 'string'
+        ? (error as any).response.data.message
+        : null;
+    if (resMessage) return resMessage;
+    if (error instanceof Error && error.message) return error.message;
+    return fallback;
+  }, []);
+
+  const handleChangePassword = async () => {
+    if (!originPw.trim()) {
+      Alert.alert('확인', '기존 비밀번호를 입력해주세요.');
       return;
     }
-    // TODO: request auth code
-    setStep('code');
-  };
-
-  const goNextFromCode = () => {
-    if (code.trim().length < 4) {
-      Alert.alert('확인', '전송된 인증 번호를 입력해주세요.');
-      return;
-    }
-    setStep('new');
-  };
-
-  const changePassword = () => {
-    if (newPw.length < 6) {
-      Alert.alert('확인', '비밀번호는 6자 이상이어야 해요.');
+    if (!PASSWORD_REGEX.test(newPw)) {
+      Alert.alert('확인', '비밀번호는 8자 이상이며, 영문/숫자/특수문자를 최소 1개씩 포함해야 합니다.');
       return;
     }
     if (newPw !== confirmPw) {
-      Alert.alert('확인', '비밀번호 확인이 일치하지 않습니다.');
+      Alert.alert('확인', '새 비밀번호 확인이 일치하지 않습니다.');
       return;
     }
-    // TODO: call update password API
-    setStep('done');
+
+    try {
+      setSubmitting(true);
+      await changePassword({
+        originPassword: originPw,
+        newPassword: newPw,
+        newPasswordConfirm: confirmPw,
+      });
+      try {
+        await logout();
+      } catch (logoutErr) {
+        console.warn('[password] logout after change failed', logoutErr);
+      }
+      router.replace('/auth');
+    } catch (error) {
+      const message = getErrorMessage(error, '비밀번호 변경에 실패했습니다.');
+      Alert.alert('실패', message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const resetFlow = () => {
-    setStep('email');
-    setEmail('');
-    setCode('');
+    setStep('form');
+    setOriginPw('');
     setNewPw('');
     setConfirmPw('');
     router.back();
@@ -68,82 +98,106 @@ export default function StudentPasswordScreen() {
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <CouncilHeader badgeLabel="학생" studentId="C246120" title="비밀번호 변경" showBack />
 
-      <View style={styles.card}>
-        {step !== 'done' && (
-          <Text style={styles.stepTitle}>
-            {step === 'email' && '학교 이메일을 입력해주세요'}
-            {step === 'code' && '이메일로 받은 인증 번호를 입력하세요'}
-            {step === 'new' && '새 비밀번호를 입력해주세요'}
-          </Text>
-        )}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+      >
+        <View style={styles.card}>
+          {step !== 'done' && (
+            <View style={{ gap: 6 }}>
+              <Text style={styles.stepTitle}>현재 비밀번호와 새 비밀번호를 입력해주세요</Text>
+              <Text style={styles.helper}>{passwordGuide}</Text>
+            </View>
+          )}
 
-        {step === 'email' && (
-          <>
-            <TextInput
-              placeholder="이메일 입력"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              style={styles.input}
-            />
-            <Pressable style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]} onPress={goNextFromEmail}>
-              <Text style={styles.primaryText}>인증 번호 전송</Text>
-            </Pressable>
-          </>
-        )}
+          {step === 'form' && (
+            <>
+              <Text style={styles.label}>현재 비밀번호</Text>
+              <View style={styles.inputRow}>
+                <TextInput
+                  placeholder="현재 비밀번호 입력"
+                  secureTextEntry={!showOrigin}
+                  value={originPw}
+                  onChangeText={setOriginPw}
+                  style={styles.inputField}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <Pressable hitSlop={10} onPress={() => setShowOrigin((v) => !v)}>
+                  <Ionicons
+                    name={showOrigin ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color={COLORS.textMuted}
+                  />
+                </Pressable>
+              </View>
 
-        {step === 'code' && (
-          <>
-            <TextInput
-              value={email}
-              editable={false}
-              style={[styles.input, { backgroundColor: disabledColor }]}
-            />
-            <TextInput
-              placeholder="인증 번호 입력"
-              keyboardType="number-pad"
-              value={code}
-              onChangeText={setCode}
-              style={styles.input}
-            />
-            <Pressable style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]} onPress={goNextFromCode}>
-              <Text style={styles.primaryText}>확인</Text>
-            </Pressable>
-          </>
-        )}
+              <Text style={styles.label}>새 비밀번호</Text>
+              <View style={styles.inputRow}>
+                <TextInput
+                  placeholder="새 비밀번호 입력"
+                  secureTextEntry={!showNew}
+                  value={newPw}
+                  onChangeText={setNewPw}
+                  style={styles.inputField}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <Pressable hitSlop={10} onPress={() => setShowNew((v) => !v)}>
+                  <Ionicons
+                    name={showNew ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color={COLORS.textMuted}
+                  />
+                </Pressable>
+              </View>
+              <View style={styles.inputRow}>
+                <TextInput
+                  placeholder="새 비밀번호 확인"
+                  secureTextEntry={!showConfirm}
+                  value={confirmPw}
+                  onChangeText={setConfirmPw}
+                  style={styles.inputField}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <Pressable hitSlop={10} onPress={() => setShowConfirm((v) => !v)}>
+                  <Ionicons
+                    name={showConfirm ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color={COLORS.textMuted}
+                  />
+                </Pressable>
+              </View>
 
-        {step === 'new' && (
-          <>
-            <TextInput
-              placeholder="새 비밀번호 입력"
-              secureTextEntry
-              value={newPw}
-              onChangeText={setNewPw}
-              style={styles.input}
-            />
-            <TextInput
-              placeholder="새 비밀번호 확인"
-              secureTextEntry
-              value={confirmPw}
-              onChangeText={setConfirmPw}
-              style={styles.input}
-            />
-            <Pressable style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]} onPress={changePassword}>
-              <Text style={styles.primaryText}>확인</Text>
-            </Pressable>
-          </>
-        )}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.primaryBtn,
+                  pressed && styles.pressed,
+                  submitting && styles.disabledBtn,
+                ]}
+                onPress={handleChangePassword}
+                disabled={submitting}
+              >
+                <Text style={styles.primaryText}>{submitting ? '변경 중...' : '변경하기'}</Text>
+              </Pressable>
+            </>
+          )}
 
-        {step === 'done' && (
-          <View style={styles.doneCard}>
-            <Text style={styles.doneText}>비밀번호가 변경되었습니다!</Text>
-            <Pressable style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]} onPress={resetFlow}>
-              <Text style={styles.primaryText}>확인</Text>
-            </Pressable>
-          </View>
-        )}
-      </View>
+          {step === 'done' && (
+            <View style={styles.doneCard}>
+              <Text style={styles.doneText}>비밀번호가 변경되었습니다!</Text>
+              <Pressable
+                style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]}
+                onPress={resetFlow}
+              >
+                <Text style={styles.primaryText}>확인</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -170,19 +224,36 @@ const styles = StyleSheet.create({
     ...TYPO.subtitle,
     color: COLORS.text,
   },
-  input: {
+  helper: {
+    ...TYPO.caption,
+    color: COLORS.textMuted,
+  },
+  label: {
+    ...TYPO.body,
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  inputRow: {
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 12,
+    height: 52,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  inputField: {
+    flex: 1,
+    paddingVertical: 0,
+    paddingHorizontal: 4,
     fontFamily: 'Pretendard-Medium',
     fontSize: 15,
     color: COLORS.text,
-    backgroundColor: '#FFFFFF',
   },
   primaryBtn: {
-    marginTop: 4,
+    marginTop: 8,
     borderRadius: 12,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
@@ -196,6 +267,9 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.9,
+  },
+  disabledBtn: {
+    opacity: 0.7,
   },
   doneCard: {
     borderRadius: 16,

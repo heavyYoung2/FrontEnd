@@ -75,7 +75,7 @@ export default function StudentRentalDashboardScreen() {
       return { label: '불러오기에 실패했어요. 다시 시도해주세요.', type: 'error' as const };
     }
     if (!blacklistInfo || !blacklistInfo.blacklisted) {
-      return { label: '경고 없음', type: 'safe' as const };
+      return { label: '없음', type: 'safe' as const };
     }
     return {
       label: effectiveBlacklistUntil ? `블랙리스트 기한 : ${effectiveBlacklistUntil}` : '블랙리스트 대상',

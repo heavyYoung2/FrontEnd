@@ -35,30 +35,42 @@ const MEMBERS = [
   },
 ];
 
-const FEATURES = [
-  '회원 인증: OAuth2 + JWT 기반 로그인',
-  '회비 관리: 납부 내역 확인 및 QR 검증',
-  '사물함 관리: 대여, 반납',
-  '관리자 기능: 대여물품 관리, 회비납부 인증, 공지사항 관리',
-];
-
 const TECH_STACK = [
-  'Language: Java 21',
-  'Framework: Spring Boot 3.5.5',
-  'Database: MySQL 8.0.43',
-  'Infra: AWS, Docker, Nginx, GitHub Actions',
+  { label: 'Language', value: 'Java 21' },
+  { label: 'Framework', value: 'Spring Boot 3.5.4' },
+  { label: 'Database', value: 'MySQL 8.0.43' },
+  { label: 'Infra', value: 'AWS, Nginx, GitHub Actions' },
 ];
 
 const DEPLOYMENT = [
-  'CI/CD: GitHub Actions - Docker Hub - AWS EC2 (예정)',
-  '운영 환경: Ubuntu 22.04, Nginx Reverse Proxy, HTTPS (예정)',
+  'CI/CD: GitHub Actions → Docker Hub → AWS EC2',
+  '운영 환경: Ubuntu 22.04, Nginx Reverse Proxy',
   '모니터링: CloudWatch, Prometheus, Grafana (예정)',
 ];
 
-const TESTING = [
-  './gradlew test 실행 시 단위 테스트/통합 테스트 자동화 (예정)',
-  'Jacoco 리포트 제공 (코드 커버리지) (예정)',
+const FEATURES = ['QR', '물품', '공지', '사물함', '마이페이지'];
+
+const CONVENTIONS = [
+  {
+    label: '브랜치 전략',
+    url: 'https://concrete-vise-062.notion.site/Git-Branch-2539715a4be68036af99d68ebaf90759?source=copy_link',
+  },
+  {
+    label: '코드 스타일',
+    url: 'https://concrete-vise-062.notion.site/2539715a4be680babbdde21692446613?source=copy_link',
+  },
+  {
+    label: 'PR 규칙',
+    url: 'https://concrete-vise-062.notion.site/Issue-PR-Commit-2539715a4be68074bd71e123523cd16c?source=copy_link',
+  },
 ];
+
+const API_DOC_URL =
+  'https://concrete-vise-062.notion.site/API-1df9715a4be680f0858ac72b73ee02d3?pvs=74';
+const ERD_IMAGE =
+  'https://github.com/user-attachments/assets/659618e5-d6d8-4cda-9871-4a206ac28e38';
+const ARCH_IMAGE =
+  'https://github.com/user-attachments/assets/edc17d6b-56e0-4072-8d78-f4ba44ca31e5';
 
 export function GuideScreenTemplate({ badgeLabel }: { badgeLabel: string }) {
   return (
@@ -66,11 +78,17 @@ export function GuideScreenTemplate({ badgeLabel }: { badgeLabel: string }) {
       <CouncilHeader badgeLabel={badgeLabel} studentId="C246120" title="회비영 안내" showBack />
 
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.heading1}>회비영</Text>
-        
+        <Text style={styles.heading1}>회비영 (H-Fee Manager)</Text>
+        <Paragraph style={styles.tagline}>
+          홍익대학교 컴퓨터공학과 학생회비 투명성 확보 및 통합 관리 플랫폼
+        </Paragraph>
+
         <Section title="📌 프로젝트 개요">
           <Paragraph>
-            홍익대학교 컴퓨터공학과 학생들을 위한 통합 관리 플랫폼입니다. 기존에는 학생회비 납부 확인과 각종 서비스를 모두 수기로 처리해 비효율적이고 불필요한 노동이 발생했습니다. 회비영은 디지털 전환을 통해 운영 과정을 투명하고 효율적으로 개선하고, 학생들이 납부한 회비를 보다 편리하고 활발하게 활용할 수 있도록 하는 것을 목표로 합니다.
+            홍익대학교 컴퓨터공학과 학생들을 위한 통합 관리 플랫폼입니다. 기존에는 학생회비 납부 확인과 각종
+            서비스를 모두 수기로 처리해 비효율적이고 불필요한 노동이 발생했습니다. 회비영은 디지털 전환을 통해
+            운영 과정을 투명하고 효율적으로 개선하고, 학생들이 납부한 회비를 보다 편리하고 활발하게 활용할 수
+            있도록 하는 것을 목표로 합니다.
           </Paragraph>
         </Section>
 
@@ -90,8 +108,8 @@ export function GuideScreenTemplate({ badgeLabel }: { badgeLabel: string }) {
         </Section>
 
         <Section title="⚙️ 기술 스택">
-          {TECH_STACK.map((line) => (
-            <Bullet key={line} text={line} />
+          {TECH_STACK.map((item) => (
+            <KeyValueRow key={item.label} label={item.label} value={item.value} />
           ))}
         </Section>
 
@@ -109,38 +127,21 @@ export function GuideScreenTemplate({ badgeLabel }: { badgeLabel: string }) {
 
         <Section title="📡 API 문서">
           <Bullet text="Swagger: /swagger-ui/index.html" />
-          <Pressable onPress={() => Linking.openURL('https://concrete-vise-062.notion.site/API-1df9715a4be680f0858ac72b73ee02d3?pvs=74')}>
-            <Text style={styles.linkText}>노션 API 명세서 바로가기</Text>
-          </Pressable>
+          <ExternalLink label="노션 API 명세서 바로가기" url={API_DOC_URL} />
         </Section>
 
         <Section title="🏗️ 아키텍처">
-          <View style={styles.codeBlock}>
-            <Text style={styles.codeText}>Client - BFF - Backend (Spring Boot)</Text>
-            <Text style={styles.codeText}>Backend - DB (MySQL)</Text>
-            <Text style={styles.codeText}>Backend - S3 (AWS S3)</Text>
-          </View>
+          <GuideImage uri={ARCH_IMAGE} />
         </Section>
 
-        <Section title="🧪 테스트">
-          {TESTING.map((line) => (
-            <Bullet key={line} text={line} />
+        <Section title="🗺️ ERD">
+          <GuideImage uri={ERD_IMAGE} />
+        </Section>
+
+        <Section title="🤝 팀 컨벤션">
+          {CONVENTIONS.map((item) => (
+            <ExternalLink key={item.label} label={item.label} url={item.url} />
           ))}
-        </Section>
-
-        <Section title="🤝 기여 가이드">
-          <Paragraph>브랜치 전략: GitHub Flow (main + feature 브랜치)</Paragraph>
-          <Pressable onPress={() => Linking.openURL('https://concrete-vise-062.notion.site/Git-Branch-2539715a4be68036af99d68ebaf90759?source=copy_link')}>
-            <Text style={styles.linkText}>브랜치 전략 상세</Text>
-          </Pressable>
-          <Paragraph style={{ marginTop: 8 }}>코드 스타일</Paragraph>
-          <Pressable onPress={() => Linking.openURL('https://concrete-vise-062.notion.site/2539715a4be680babbdde21692446613?source=copy_link')}>
-            <Text style={styles.linkText}>코드 스타일 가이드</Text>
-          </Pressable>
-          <Paragraph style={{ marginTop: 8 }}>PR 규칙</Paragraph>
-          <Pressable onPress={() => Linking.openURL('https://concrete-vise-062.notion.site/Issue-PR-Commit-2539715a4be68074bd71e123523cd16c?source=copy_link')}>
-            <Text style={styles.linkText}>이슈 · PR · 커밋 가이드</Text>
-          </Pressable>
         </Section>
       </ScrollView>
     </SafeAreaView>
@@ -187,6 +188,35 @@ function Bullet({ text }: { text: string }) {
   );
 }
 
+function KeyValueRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.keyValueRow}>
+      <Text style={styles.keyValueLabel}>{label}</Text>
+      <Text style={styles.keyValueValue}>{value}</Text>
+    </View>
+  );
+}
+
+function ExternalLink({ label, url }: { label: string; url: string }) {
+  return (
+    <Pressable onPress={() => Linking.openURL(url)}>
+      <Text style={styles.linkText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function GuideImage({ uri }: { uri: string }) {
+  return (
+    <Image
+      source={{ uri }}
+      style={styles.guideImage}
+      resizeMode="contain"
+      accessible
+      accessibilityLabel="회비영 소개 이미지"
+    />
+  );
+}
+
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.bg },
   container: {
@@ -197,6 +227,12 @@ const styles = StyleSheet.create({
   heading1: {
     ...TYPO.h1,
     color: COLORS.text,
+  },
+  tagline: {
+    ...TYPO.body,
+    color: COLORS.textMuted,
+    marginTop: 4,
+    lineHeight: 22,
   },
   heading2: {
     ...TYPO.subtitle,
@@ -214,11 +250,13 @@ const styles = StyleSheet.create({
   },
   membersRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexWrap: 'wrap',
     gap: 12,
   },
   memberCard: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '30%',
+    minWidth: 140,
     alignItems: 'center',
     gap: 6,
     paddingVertical: 12,
@@ -260,16 +298,35 @@ const styles = StyleSheet.create({
     flex: 1,
     color: COLORS.text,
   },
-  codeBlock: {
-    backgroundColor: '#1118270D',
-    borderRadius: 12,
-    padding: 16,
-    gap: 4,
+  keyValueRow: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
   },
-  codeText: {
-    fontFamily: 'Courier',
+  keyValueLabel: {
+    fontFamily: 'Pretendard-SemiBold',
     color: COLORS.text,
-    fontSize: 12,
-    lineHeight: 18,
+    fontSize: 14,
+  },
+  keyValueValue: {
+    ...TYPO.body,
+    color: COLORS.text,
+    textAlign: 'right',
+    flexShrink: 1,
+  },
+  guideImage: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
   },
 });

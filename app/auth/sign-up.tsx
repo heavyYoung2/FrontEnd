@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '@/src/design/colors';
 import { requestEmailCode, signUp, SignUpPayload, verifyEmailCode } from '@/src/api/auth';
 
@@ -139,6 +140,8 @@ export default function SignUpScreen() {
 
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
   const [department, setDepartment] = useState('');
   const [studentId, setStudentId] = useState('');
   const [name, setName] = useState('');
@@ -688,22 +691,44 @@ export default function SignUpScreen() {
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>비밀번호를 설정해주세요.</Text>
                 <View style={styles.fieldColumn}>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="비밀번호 입력"
-                    placeholderTextColor={COLORS.textMuted}
-                    secureTextEntry
-                    value={password}
-                    onChangeText={setPassword}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="비밀번호 확인"
-                    placeholderTextColor={COLORS.textMuted}
-                    secureTextEntry
-                    value={passwordConfirm}
-                    onChangeText={setPasswordConfirm}
-                  />
+                  <View style={styles.inputRow}>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="비밀번호 입력"
+                      placeholderTextColor={COLORS.textMuted}
+                      secureTextEntry={!showPassword}
+                      value={password}
+                      onChangeText={setPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    <Pressable hitSlop={10} onPress={() => setShowPassword((v) => !v)}>
+                      <Ionicons
+                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                        size={20}
+                        color={COLORS.textMuted}
+                      />
+                    </Pressable>
+                  </View>
+                  <View style={styles.inputRow}>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="비밀번호 확인"
+                      placeholderTextColor={COLORS.textMuted}
+                      secureTextEntry={!showPasswordConfirm}
+                      value={passwordConfirm}
+                      onChangeText={setPasswordConfirm}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    <Pressable hitSlop={10} onPress={() => setShowPasswordConfirm((v) => !v)}>
+                      <Ionicons
+                        name={showPasswordConfirm ? 'eye-off-outline' : 'eye-outline'}
+                        size={20}
+                        color={COLORS.textMuted}
+                      />
+                    </Pressable>
+                  </View>
                 </View>
               </View>
 
@@ -971,6 +996,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Pretendard-Medium',
     color: COLORS.text,
+  },
+  inputRow: {
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 50,
+  },
+  inputField: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Pretendard-Medium',
+    color: COLORS.text,
+    paddingVertical: 0,
+    paddingHorizontal: 4,
   },
   feedbackBlock: {
     marginTop: 8,

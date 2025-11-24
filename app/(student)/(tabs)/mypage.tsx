@@ -135,7 +135,7 @@ export default function StudentMyPageScreen() {
       return { label: '불러오기에 실패했어요. 다시 시도해주세요.', type: 'error' as const };
     }
     if (!blacklist || !blacklist.blacklisted) {
-      return { label: '경고 없음', type: 'safe' as const };
+      return { label: '없음', type: 'safe' as const };
     }
     return {
       label: blacklist.blacklistUntil ? `블랙리스트 기한 : ${blacklist.blacklistUntil}` : '블랙리스트 대상',

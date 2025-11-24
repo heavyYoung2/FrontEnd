@@ -18,7 +18,7 @@ const MENU = [
   { label: '로그아웃', action: 'logout' as const },
   { label: '알림 설정', action: 'notifications' as const },
   { label: '비밀번호 변경하기', action: 'password' as const },
-  { label: '회비영 사용법', action: 'guide' as const },
+  { label: '회비영 안내', action: 'guide' as const },
   { label: '학생회 화면 전환', action: 'switch-role' as const },
   { label: '회원 탈퇴하기', action: 'withdraw' as const },
 ];

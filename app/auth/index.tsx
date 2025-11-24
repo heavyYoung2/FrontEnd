@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   KeyboardAvoidingView,
   Keyboard,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -16,12 +16,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import HoebiyoungLogo from '@/src/components/HoebiyoungLogo';
 import { COLORS } from '@/src/design/colors';
 import { useAuth } from '@/src/auth/AuthProvider';
 
 const TEST_EMAIL = 'heavyyoung@g.hongik.ac.kr';
 const TEST_PASSWORD = 'a12345678@';
+const EMAIL_FIND_URL = 'https://it.hongik.ac.kr/it/board/0102.do';
 
 export default function AuthIndexScreen() {
   const router = useRouter();
@@ -30,11 +32,9 @@ export default function AuthIndexScreen() {
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const toastAnim = useRef(new Animated.Value(0));
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const showWipAlert = () =>
-    Alert.alert('준비 중입니다', '해당 기능은 곧 제공될 예정이에요.');
 
   const handleSignUp = () => {
     router.push('/auth/sign-up');
@@ -52,6 +52,19 @@ export default function AuthIndexScreen() {
     if (error instanceof Error && error.message) return error.message;
     return fallback;
   }, []);
+
+  const handleFindEmail = useCallback(async () => {
+    try {
+      const supported = await Linking.canOpenURL(EMAIL_FIND_URL);
+      if (!supported) {
+        showToast('링크를 열 수 없습니다. 잠시 후 다시 시도해주세요.');
+        return;
+      }
+      await Linking.openURL(EMAIL_FIND_URL);
+    } catch (error) {
+      showToast('링크를 열 수 없습니다. 잠시 후 다시 시도해주세요.');
+    }
+  }, [showToast]);
 
   const showToast = useCallback((message: string) => {
     if (toastTimer.current) {
@@ -156,14 +169,25 @@ export default function AuthIndexScreen() {
 
             <View style={styles.fieldBlock}>
               <Text style={styles.label}>비밀번호</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="비밀번호를 입력해주세요."
-                placeholderTextColor={COLORS.textMuted}
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-              />
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={styles.inputField}
+                  placeholder="비밀번호를 입력해주세요."
+                  placeholderTextColor={COLORS.textMuted}
+                  secureTextEntry={!showPassword}
+                  value={password}
+                  onChangeText={setPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <Pressable hitSlop={10} onPress={() => setShowPassword((v) => !v)}>
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color={COLORS.textMuted}
+                  />
+                </Pressable>
+              </View>
             </View>
 
             <View style={styles.actionsRow}>
@@ -194,8 +218,8 @@ export default function AuthIndexScreen() {
             </View>
 
           <View style={styles.helperLinks}>
-            <Pressable onPress={showWipAlert} hitSlop={8}>
-              <Text style={styles.helperLinkText}>아이디 찾기</Text>
+            <Pressable onPress={handleFindEmail} hitSlop={8}>
+              <Text style={styles.helperLinkText}>이메일 찾기</Text>
             </Pressable>
             <View style={styles.helperDivider} />
             <Pressable onPress={handleResetPassword} hitSlop={8}>
@@ -278,6 +302,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Pretendard-Medium',
     color: COLORS.text,
+  },
+  inputRow: {
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 50,
+  },
+  inputField: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Pretendard-Medium',
+    color: COLORS.text,
+    paddingVertical: 0,
+    paddingHorizontal: 4,
   },
   actionsRow: {
     flexDirection: 'row',

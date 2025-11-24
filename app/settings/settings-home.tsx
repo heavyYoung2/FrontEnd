@@ -73,7 +73,7 @@ export default function MyPageScreen() {
           onPress={() => router.push('/settings/manage-members')}
         />
         <SettingRow label="비밀번호 변경하기" onPress={() => router.push('/settings/password')} />
-        <SettingRow label="회비영 사용법" onPress={() => router.push('/settings/guide')} />
+        <SettingRow label="회비영 안내" onPress={() => router.push('/settings/guide')} />
         <SettingRow label="학생 화면 전환" onPress={handleSwitchToStudent} />
         <SettingRow
           label="회원 탈퇴하기"

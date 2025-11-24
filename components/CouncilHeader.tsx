@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import { useAuth } from '@/src/auth/AuthProvider';
 
 const COLORS = {
@@ -45,6 +45,7 @@ export default function CouncilHeader({
   containerStyle,
 }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
   const { role, studentId: authStudentId } = useAuth();
 
   const resolvedBadgeLabel =
@@ -69,9 +70,25 @@ export default function CouncilHeader({
     }
   };
 
+  // Decide mypage destination based on the current view rather than auth role.
+  const identityTarget = React.useMemo(() => {
+    if (resolvedBadgeLabel === '학생') {
+      return '/(student)/(tabs)/mypage';
+    }
+    if (resolvedBadgeLabel === '학생회') {
+      return '/(council)/mypage';
+    }
+    if (pathname?.includes('/(student)')) {
+      return '/(student)/(tabs)/mypage';
+    }
+    if (pathname?.includes('/(council)')) {
+      return '/(council)/mypage';
+    }
+    return role === 'council' ? '/(council)/mypage' : '/(student)/(tabs)/mypage';
+  }, [pathname, resolvedBadgeLabel, role]);
+
   const handleIdentityPress = () => {
-    const target = role === 'council' ? '/(council)/mypage' : '/(student)/(tabs)/mypage';
-    router.push(target);
+    router.push(identityTarget);
   };
 
   return (

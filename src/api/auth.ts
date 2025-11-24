@@ -43,6 +43,16 @@ type TempPasswordResult = {
   message: string;
 };
 
+export type ChangePasswordPayload = {
+  originPassword: string;
+  newPassword: string;
+  newPasswordConfirm: string;
+};
+
+type ChangePasswordResult = {
+  memberId?: number | string | null;
+};
+
 export async function signUp(payload: SignUpPayload): Promise<number> {
   const { data } = await api.post<ApiResponse<SignUpResult>>('/api/auth/sign-in', payload);
 
@@ -130,4 +140,18 @@ export async function issueTempPassword(email: string): Promise<TempPasswordResu
   }
 
   return data.result;
+}
+
+export async function changePassword(payload: ChangePasswordPayload): Promise<number> {
+  const { data } = await api.post<ApiResponse<ChangePasswordResult>>(
+    '/api/auth/change-password',
+    payload,
+  );
+
+  if (!data?.isSuccess || !data.result) {
+    throw new Error(data?.message ?? '비밀번호 변경에 실패했습니다.');
+  }
+
+  const memberId = Number((data.result as any).memberId ?? data.result);
+  return Number.isFinite(memberId) ? memberId : 0;
 }
