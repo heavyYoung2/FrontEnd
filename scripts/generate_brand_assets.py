@@ -225,7 +225,7 @@ def main() -> None:
     favicon_size = 256
     favicon = make_canvas(favicon_size, favicon_size, WHITE)
     draw_logo(favicon, favicon_size, favicon_size, scale=favicon_size / 980, color=BLUE)
-    write_png(os.path.join(root, 'assets/images/favicon-heavy-young.png'), favicon_size, favicon_size, favicon)
+    write_png(os.path.join(root, 'assets/images/favicon-heavy-youngg.png'), favicon_size, favicon_size, favicon)
 
     print('Generated brand assets.')
 

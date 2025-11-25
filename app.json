@@ -38,7 +38,7 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon-heavy-young.png"
+      "favicon": "./assets/images/favicon-heavy-youngg.png"
     },
     "plugins": [
       "expo-router",
