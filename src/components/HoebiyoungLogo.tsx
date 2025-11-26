@@ -1,34 +1,23 @@
 import React, { useMemo } from 'react';
-import { Image, ImageSourcePropType, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import HeavyYoungLogoSvg from '@/assets/images/heavy-young-svg.svg';
 
 type HoebiyoungLogoProps = {
   taglineVisible?: boolean;
   align?: 'center' | 'left';
 };
 
-const LOGO_WITH_TAGLINE = require('@/assets/images/heavy-young-logo.png') as ImageSourcePropType;
-const LOGO_ICON = require('@/assets/images/heavy-young-app.png') as ImageSourcePropType;
+const ASPECT_RATIO = 1025 / 533;
 
 export default function HoebiyoungLogo({ taglineVisible = true, align = 'center' }: HoebiyoungLogoProps) {
-  const { source, width } = useMemo(() => {
-    if (taglineVisible) {
-      return { source: LOGO_WITH_TAGLINE, width: 220 };
-    }
-    return { source: LOGO_ICON, width: 88 };
+  const { width, height } = useMemo(() => {
+    const targetWidth = taglineVisible ? 240 : 120;
+    return { width: targetWidth, height: targetWidth / ASPECT_RATIO };
   }, [taglineVisible]);
-
-  const aspectRatio = useMemo(() => {
-    const resolved = Image.resolveAssetSource(source);
-    return resolved?.width && resolved?.height ? resolved.width / resolved.height : 1;
-  }, [source]);
 
   return (
     <View style={[styles.wrapper, align === 'left' && { alignItems: 'flex-start' }]}>
-      <Image
-        source={source}
-        style={[styles.image, { width, aspectRatio }]}
-        resizeMode="contain"
-      />
+      <HeavyYoungLogoSvg width={width} height={height} />
     </View>
   );
 }
@@ -36,8 +25,5 @@ export default function HoebiyoungLogo({ taglineVisible = true, align = 'center'
 const styles = StyleSheet.create({
   wrapper: {
     alignItems: 'center',
-  },
-  image: {
-    height: undefined,
   },
 });
