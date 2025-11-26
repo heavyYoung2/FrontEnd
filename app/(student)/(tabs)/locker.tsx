@@ -538,8 +538,9 @@ function LockerSectionModal({ section, visible, onClose, state, onReload }: Sect
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+      <View style={styles.modalBackdrop}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{section} 구역 사물함</Text>
             <Pressable onPress={onClose} hitSlop={10} style={styles.modalCloseBtn}>
@@ -575,34 +576,43 @@ function LockerSectionModal({ section, visible, onClose, state, onReload }: Sect
           )}
 
           {state.status === 'loaded' && (
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
-              <View style={styles.lockersWrap}>
-                {state.lockers.map((locker) => {
-                  const theme =
-                    STATUS_THEME[locker.status.toUpperCase() as keyof typeof STATUS_THEME] ?? STATUS_THEME.AVAILABLE;
-                  return (
-                    <View
-                      key={locker.id}
-                      style={[styles.lockerTile, { borderColor: theme.border, backgroundColor: theme.bg }]}
-                    >
-                      <Text style={[styles.lockerLabel, { color: theme.text }]}>{locker.label}</Text>
-                      <Text style={[styles.lockerStatus, { color: theme.text }]}>{theme.label}</Text>
-                      {locker.studentName ? (
-                        <>
-                          <Text style={styles.lockerMeta}>{locker.studentName}</Text>
-                          {locker.studentId ? <Text style={styles.lockerMetaSecondary}>{locker.studentId}</Text> : null}
-                        </>
-                      ) : (
-                        <Text style={styles.lockerMetaSecondary}>신청자 없음</Text>
-                      )}
-                    </View>
-                  );
-                })}
-              </View>
-            </ScrollView>
+            <View style={styles.modalBody}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                style={styles.modalScroll}
+                contentContainerStyle={styles.modalScrollContent}
+                nestedScrollEnabled
+              >
+                <View style={styles.lockersWrap}>
+                  {state.lockers.map((locker) => {
+                    const theme =
+                      STATUS_THEME[locker.status.toUpperCase() as keyof typeof STATUS_THEME] ?? STATUS_THEME.AVAILABLE;
+                    return (
+                      <View
+                        key={locker.id}
+                        style={[styles.lockerTile, { borderColor: theme.border, backgroundColor: theme.bg }]}
+                      >
+                        <Text style={[styles.lockerLabel, { color: theme.text }]}>{locker.label}</Text>
+                        <Text style={[styles.lockerStatus, { color: theme.text }]}>{theme.label}</Text>
+                        {locker.studentName ? (
+                          <>
+                            <Text style={styles.lockerMeta}>{locker.studentName}</Text>
+                            {locker.studentId ? (
+                              <Text style={styles.lockerMetaSecondary}>{locker.studentId}</Text>
+                            ) : null}
+                          </>
+                        ) : (
+                          <Text style={styles.lockerMetaSecondary}>신청자 없음</Text>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            </View>
           )}
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -820,6 +830,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modalCard: {
+    alignSelf: 'stretch',
     borderRadius: 24,
     backgroundColor: COLORS.surface,
     padding: 20,
@@ -849,6 +860,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  modalBody: {
+    flex: 1,
+  },
+  modalScroll: {
+    flex: 1,
+  },
+  modalScrollContent: {
+    paddingHorizontal: 4,
+    paddingBottom: 12,
+    paddingTop: 4,
   },
   modalLoading: {
     alignItems: 'center',
@@ -880,9 +902,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     rowGap: 10,
     columnGap: 0,
-    paddingHorizontal: 4,
-    paddingBottom: 8,
-    paddingTop: 4,
   },
   lockerTile: {
     flexBasis: '30%',
