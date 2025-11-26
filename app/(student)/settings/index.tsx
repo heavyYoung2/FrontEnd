@@ -68,7 +68,7 @@ export default function StudentSettingsHome() {
           );
           return;
         }
-        router.replace('/(council)/mypage');
+        router.replace('/(council)');
         break;
       default:
         break;

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Buffer } from 'buffer';
 import * as SecureStore from 'expo-secure-store';
 import { Alert } from 'react-native';
@@ -104,6 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [studentId, setStudentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const authRef = useRef(false);
 
   useEffect(() => {
     (async () => {
@@ -147,7 +148,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
+    authRef.current = isAuthenticated;
+  }, [isAuthenticated]);
+
+  useEffect(() => {
     setUnauthorizedHandler(() => {
+      // 로그인 상태가 아니면 굳이 경고창을 띄우지 않는다.
+      if (!authRef.current) {
+        resetUnauthorizedLock();
+        return;
+      }
       Alert.alert(
         '로그인이 필요합니다',
         '세션이 만료되었어요. 다시 로그인해 주세요.',
@@ -174,6 +184,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.warn('[AuthProvider] failed to clear stored session', error);
     } finally {
+      resetUnauthorizedLock(); // 로그인 화면에서 재시도 가능하도록 잠금 해제
       setAuthToken(null);
       setRole(null);
       setRawRole(null);
@@ -219,6 +230,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async () => {
     try {
+      // 토큰이 만료/손상돼도 추가 경고창이 쌓이지 않도록 실패는 조용히 무시
       await requestLogout();
     } catch (error) {
       console.warn('[AuthProvider] logout request failed', error);

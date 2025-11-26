@@ -165,13 +165,13 @@ export default function StudentMyPageScreen() {
   const lockerDisplayNumber = useMemo(() => {
     const resolvedLockerNumber = myLocker?.lockerNumber ?? myLocker?.lockerName;
 
-    if (lockerStatusCode === 'NO_RENTAL') {
-      return resolvedLockerNumber && resolvedLockerNumber !== '0' ? resolvedLockerNumber : '신청 처리 중';
-    }
     if (lockerStatusCode === 'RENTAL_REQUESTED') {
       return resolvedLockerNumber && resolvedLockerNumber !== '0' ? resolvedLockerNumber : '신청 처리 중';
     }
-    return resolvedLockerNumber ?? '-';
+    if (lockerStatusCode === 'RENTING') {
+      return resolvedLockerNumber ?? '-';
+    }
+    return resolvedLockerNumber && resolvedLockerNumber !== '0' ? resolvedLockerNumber : '배정 정보 없음';
   }, [lockerStatusCode, myLocker]);
 
   const membershipBadge = feeStatusLoading

@@ -129,7 +129,7 @@ export default function CouncilCalendarScreen() {
       };
     }
     return map;
-  }, [events, selected]);
+  }, [eventColors, events, selected]);
 
   const filtered = useMemo(() => {
     if (!selected) return [];

@@ -757,45 +757,48 @@ function ScheduleDetailModal({
       visible={!!schedule}
       onRequestClose={onClose}
     >
-      <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{schedule.semester} 신청 상세</Text>
-            <View style={styles.modalHeaderActions}>
-              <View
-                style={[
-                  styles.statusChip,
-                  status.kind === 'available'
-                    ? styles.statusOpen
-                    : status.kind === 'upcoming'
-                      ? styles.statusUpcoming
-                      : styles.statusClosed,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.statusText,
-                    status.kind === 'available'
-                      ? styles.statusTextOpen
-                      : status.kind === 'upcoming'
-                        ? styles.statusTextUpcoming
-                        : styles.statusTextClosed,
-                  ]}
-                >
-                  {status.label}
-                </Text>
-              </View>
+      <View style={styles.modalBackdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
 
-              <Pressable onPress={onClose} hitSlop={10} style={styles.modalCloseBtn}>
-                <Ionicons name="close" size={20} color={COLORS.text} />
-              </Pressable>
-            </View>
-          </View>
-
+        <View style={styles.modalCard}>
           <ScrollView
+            keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.modalScroll}
             showsVerticalScrollIndicator={false}
           >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{schedule.semester} 신청 상세</Text>
+              <View style={styles.modalHeaderActions}>
+                <View
+                  style={[
+                    styles.statusChip,
+                    status.kind === 'available'
+                      ? styles.statusOpen
+                      : status.kind === 'upcoming'
+                        ? styles.statusUpcoming
+                        : styles.statusClosed,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusText,
+                      status.kind === 'available'
+                        ? styles.statusTextOpen
+                        : status.kind === 'upcoming'
+                          ? styles.statusTextUpcoming
+                          : styles.statusTextClosed,
+                    ]}
+                  >
+                    {status.label}
+                  </Text>
+                </View>
+
+                <Pressable onPress={onClose} hitSlop={10} style={styles.modalCloseBtn}>
+                  <Ionicons name="close" size={20} color={COLORS.text} />
+                </Pressable>
+              </View>
+            </View>
+
             <View style={styles.scheduleMetaRow}>
               <MetaItem label="신청 방식" value={schedule.method} />
             </View>
@@ -902,8 +905,8 @@ function ScheduleDetailModal({
               <Text style={styles.modalConfirmText}>닫기</Text>
             </Pressable>
           </ScrollView>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -1277,18 +1280,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.35)',
     justifyContent: 'center',
+    alignItems: 'center',
     padding: 20,
   },
   modalCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: 18,
-    gap: 14,
     maxHeight: '90%',
     width: '100%',
   },
   modalScroll: {
-    paddingBottom: 24,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 42,
     gap: 16,
   },
   modalHeader: {

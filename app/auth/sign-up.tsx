@@ -108,6 +108,8 @@ const AGREEMENT_DETAILS: Record<
 };
 
 const SCHOOL_EMAIL_REGEX = /^[\w.+-]+@g\.hongik\.ac\.kr$/i;
+const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d)(?=.*[!@#$%^&*()_+=-]).{8,}$/;
+const PHONE_RULE = /^01[016789]-?\d{3,4}-?\d{4}$/;
 
 const initialAgreementState: Record<AgreementKey, boolean> =
   AGREEMENT_ITEMS.reduce((acc, item) => {
@@ -191,15 +193,41 @@ export default function SignUpScreen() {
   }, []);
 
   const getErrorMessage = useCallback((error: unknown, fallback: string) => {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'response' in error &&
-      typeof (error as any).response?.data?.message === 'string'
-    ) {
-      return (error as any).response.data.message as string;
+    if (typeof error === 'object' && error !== null && 'response' in error) {
+      const resData = (error as any).response?.data;
+      const resStatus = (error as any).response?.status;
+
+      if (resData) {
+        if (typeof resData.message === 'string' && resData.message.trim()) {
+          return resData.message as string;
+        }
+
+        const candidateLists = [resData.errors, resData.result, resData.fieldErrors, resData.details];
+        for (const list of candidateLists) {
+          if (Array.isArray(list) && list.length > 0) {
+            const normalized = list
+              .map((item) => {
+                if (typeof item === 'string') return item;
+                if (item?.defaultMessage) return item.defaultMessage;
+                if (item?.message) return item.message;
+                if (item?.reason) return item.reason;
+                return null;
+              })
+              .filter(Boolean);
+            if (normalized.length > 0) return normalized[0] as string;
+          }
+        }
+      }
+
+      if (resStatus && Number.isFinite(resStatus)) {
+        return `요청이 실패했습니다. (HTTP ${resStatus})`;
+      }
     }
+
     if (error instanceof Error && error.message) {
+      if (/^Request failed with status code \d+$/i.test(error.message)) {
+        return fallback;
+      }
       return error.message;
     }
     return fallback;
@@ -326,11 +354,21 @@ export default function SignUpScreen() {
       return;
     }
 
+    if (!PASSWORD_RULE.test(password)) {
+      showToast('비밀번호는 8자 이상, 영문/숫자/특수문자를 모두 포함해야 합니다.', 'error');
+      return;
+    }
+
     const trimmedDepartment = department.trim();
     const trimmedStudentId = studentId.trim();
     const trimmedName = name.trim();
     const trimmedPhone = phone.trim();
     const trimmedEmail = email.trim();
+
+    if (!PHONE_RULE.test(trimmedPhone)) {
+      showToast('전화번호는 010-XXXX-XXXX 형식으로 입력해 주세요.', 'error');
+      return;
+    }
 
     const payload: SignUpPayload = {
       email: trimmedEmail,
@@ -701,6 +739,9 @@ export default function SignUpScreen() {
                       onChangeText={setPassword}
                       autoCapitalize="none"
                       autoCorrect={false}
+                      textContentType="newPassword"
+                      autoComplete="password-new"
+                      importantForAutofill="yes"
                     />
                     <Pressable hitSlop={10} onPress={() => setShowPassword((v) => !v)}>
                       <Ionicons
@@ -720,6 +761,9 @@ export default function SignUpScreen() {
                       onChangeText={setPasswordConfirm}
                       autoCapitalize="none"
                       autoCorrect={false}
+                      textContentType="password"
+                      autoComplete="password"
+                      importantForAutofill="yes"
                     />
                     <Pressable hitSlop={10} onPress={() => setShowPasswordConfirm((v) => !v)}>
                       <Ionicons
@@ -730,6 +774,9 @@ export default function SignUpScreen() {
                     </Pressable>
                   </View>
                 </View>
+                <Text style={styles.helperText}>
+                  비밀번호는 8자 이상이며, 영문/숫자/특수문자를 최소 1개씩 포함해야 합니다.
+                </Text>
               </View>
 
               <View style={styles.section}>
@@ -763,7 +810,10 @@ export default function SignUpScreen() {
                     keyboardType="phone-pad"
                     value={phone}
                     onChangeText={setPhone}
+                    autoComplete="tel"
+                    textContentType="telephoneNumber"
                   />
+                  <Text style={styles.helperText}>전화번호는 010-XXXX-XXXX 형식으로 입력해 주세요.</Text>
                 </View>
                 <Text style={styles.noticeText}>
                   경고: 타인의 학번을 도용할 경우, 관련 법률(정보통신망법, 개인정보보호법 등)에 따라 형사처벌 및 민사상 손해배상 책임이 발생할 수 있습니다. 의도적인 도용 행위는 엄중한 법적 책임이 따르며, 적발 시 즉시 관련 기관에 신고 조치됩니다.
@@ -979,6 +1029,12 @@ const styles = StyleSheet.create({
     fontFamily: 'Pretendard-SemiBold',
     color: COLORS.text,
   },
+  helperText: {
+    marginTop: 6,
+    fontSize: 11,
+    fontFamily: 'Pretendard-Medium',
+    color: COLORS.textMuted,
+  },
   fieldGroup: {
     flexDirection: 'row',
     gap: 12,
@@ -1154,10 +1210,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.35)',
     justifyContent: 'center',
     paddingHorizontal: 24,
-    paddingVertical: 32,
+    paddingTop: 48,
+    paddingBottom: 32,
   },
   modalContainer: {
     flex: 1,
+    maxHeight: '85%',
+    alignSelf: 'stretch',
     backgroundColor: COLORS.bg,
     borderRadius: 18,
     paddingVertical: 28,

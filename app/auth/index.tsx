@@ -61,7 +61,7 @@ export default function AuthIndexScreen() {
         return;
       }
       await Linking.openURL(EMAIL_FIND_URL);
-    } catch (error) {
+    } catch {
       showToast('링크를 열 수 없습니다. 잠시 후 다시 시도해주세요.');
     }
   }, [showToast]);

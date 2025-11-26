@@ -448,7 +448,6 @@ function LockerSectionModal({
   ) => void;
   onLoginRedirect: () => void;
 }) {
-  const themeKeys = ['IN_USE', 'AVAILABLE', 'BROKEN'] as const;
   const statusActions = ['IN_USE', 'AVAILABLE', 'BROKEN'] as const;
   const [selectedLocker, setSelectedLocker] = useState<LockerItem | null>(null);
   const [savingStatus, setSavingStatus] = useState(false);

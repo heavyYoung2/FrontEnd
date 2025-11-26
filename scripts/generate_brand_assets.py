@@ -217,11 +217,6 @@ def main() -> None:
     draw_logo(monochrome, icon_size, icon_size, scale=icon_size / 980, color=BLACK)
     write_png(os.path.join(root, 'assets/images/android-icon-monochrome-heavy-young.png'), icon_size, icon_size, monochrome)
 
-    splash_size = 1400
-    splash = make_canvas(splash_size, splash_size, WHITE)
-    draw_logo(splash, splash_size, splash_size, scale=splash_size / 1100, color=DEEP_BLUE)
-    write_png(os.path.join(root, 'assets/images/splash-icon-heavy-young.png'), splash_size, splash_size, splash)
-
     favicon_size = 256
     favicon = make_canvas(favicon_size, favicon_size, WHITE)
     draw_logo(favicon, favicon_size, favicon_size, scale=favicon_size / 980, color=BLUE)

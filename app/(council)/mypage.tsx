@@ -31,7 +31,7 @@ export default function CouncilMyPageScreen() {
             style={({ pressed }) => [styles.actionButton, pressed && { opacity: 0.95 }]}
             hitSlop={10}
           >
-            <Text style={styles.actionLabel}>바로 전환하기</Text>
+            <Text style={styles.actionLabel}>학생 화면으로 바로 전환하기</Text>
           </Pressable>
         </View>
 
