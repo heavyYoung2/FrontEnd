@@ -534,7 +534,7 @@ type SectionModalProps = {
 };
 
 function LockerSectionModal({ section, visible, onClose, state, onReload }: SectionModalProps) {
-  const themeKeys = ['MY', 'IN_USE', 'AVAILABLE', 'BROKEN'] as const;
+  const themeKeys = ['IN_USE', 'AVAILABLE', 'BROKEN'] as const;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -868,9 +868,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalScrollContent: {
-    paddingHorizontal: 4,
     paddingBottom: 12,
-    paddingTop: 4,
   },
   modalLoading: {
     alignItems: 'center',
@@ -902,6 +900,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     rowGap: 10,
     columnGap: 0,
+    paddingHorizontal: 4,
+    paddingBottom: 8,
+    paddingTop: 4,
   },
   lockerTile: {
     flexBasis: '30%',
