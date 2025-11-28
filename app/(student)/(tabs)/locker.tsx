@@ -773,13 +773,14 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderWidth: 1,
   },
   legendText: {
     fontFamily: 'Pretendard-SemiBold',
-    fontSize: 13,
+    fontSize: 12,
+    lineHeight: 16,
   },
   sectionGrid: {
     flexDirection: 'row',
@@ -882,7 +883,7 @@ const styles = StyleSheet.create({
   modalLegend: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   modalLoading: {
     alignItems: 'center',
