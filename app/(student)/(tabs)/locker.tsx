@@ -1,4 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { ParamListBase } from '@react-navigation/native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
@@ -114,26 +117,38 @@ const getPreferredSection = (info?: MyLockerInfoApi | null): SectionId | null =>
   return null;
 };
 
-const normalizeLockers = (raw: LockerInfoApi[]): LockerItem[] =>
+const normalizeLockers = (raw: LockerInfoApi[], sectionFallback: SectionId): LockerItem[] =>
   raw
-    .map((item) => {
+    .map((item, index) => {
+      const locationWithSection =
+        item.lockerSection
+          ? `${item.lockerSection}${
+              item.lockerNumber ?? item.lockerNo ?? item.lockerNum ?? item.lockerId ?? ''
+            }`
+          : null;
       const locationSource =
+        locationWithSection ||
         item.location ||
         item.lockerNumber ||
         item.lockerNum ||
         item.lockerName ||
-        item.sectionName ||
-        (item.lockerSection
-          ? `${item.lockerSection}${
-              item.lockerNumber ?? item.lockerNo ?? item.lockerNum ?? item.lockerId ?? ''
-            }`
-          : null);
+        item.sectionName;
       if (!locationSource) return null;
       const normalizedLocation = String(locationSource);
-      const sectionId = normalizedLocation.charAt(0).toUpperCase();
+      const sectionFromLocation = normalizedLocation.charAt(0).toUpperCase();
+      const sectionId = isSectionId(sectionFromLocation)
+        ? sectionFromLocation
+        : isSectionId(String(item.lockerSection ?? '').charAt(0).toUpperCase())
+          ? (item.lockerSection!.charAt(0).toUpperCase() as SectionId)
+          : sectionFallback;
       if (!isSectionId(sectionId)) return null;
-      const number = parseInt(normalizedLocation.slice(1), 10);
-      if (Number.isNaN(number)) return null;
+      const numericPart = normalizedLocation.replace(/[^0-9]/g, '');
+      const parsedNumber = parseInt(numericPart, 10);
+      const number = Number.isNaN(parsedNumber)
+        ? typeof item.lockerId === 'number'
+          ? item.lockerId
+          : index + 1
+        : parsedNumber;
       const statusUpper = (item.lockerStatus ?? item.status ?? 'AVAILABLE').toUpperCase();
 
       const base: LockerItem = {
@@ -182,6 +197,7 @@ const summarizeLockers = (lockers: LockerItem[]) =>
 export default function StudentLockerScreen() {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, 16);
+  const navigation = useNavigation<BottomTabNavigationProp<ParamListBase>>();
   const [sectionStates, setSectionStates] = useState<Record<SectionId, SectionState>>(() => buildInitialStates());
   const [selectedSection, setSelectedSection] = useState<SectionId>('A');
   const [modalVisible, setModalVisible] = useState(false);
@@ -197,7 +213,7 @@ export default function StudentLockerScreen() {
     }));
     try {
       const raw = await fetchLockersBySection(section);
-      const lockers = normalizeLockers(raw);
+      const lockers = normalizeLockers(raw, section);
       const counts = summarizeLockers(lockers);
       setSectionStates((prev) => ({
         ...prev,
@@ -243,6 +259,21 @@ export default function StudentLockerScreen() {
   useEffect(() => {
     loadLocker();
   }, [loadLocker]);
+
+  useFocusEffect(
+    useCallback(() => {
+      handleRefresh();
+      loadLocker();
+    }, [handleRefresh, loadLocker]),
+  );
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('tabPress', () => {
+      handleRefresh();
+      loadLocker();
+    });
+    return unsubscribe;
+  }, [handleRefresh, loadLocker, navigation]);
 
   const statusChips = useMemo(
     () =>
