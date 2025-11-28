@@ -534,12 +534,15 @@ type SectionModalProps = {
 };
 
 function LockerSectionModal({ section, visible, onClose, state, onReload }: SectionModalProps) {
-  const themeKeys = ['IN_USE', 'AVAILABLE', 'BROKEN'] as const;
+  const themeKeys = ['MY', 'IN_USE', 'AVAILABLE', 'BROKEN'] as const;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalBackdrop}>
-        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} />
+        {/* 바깥 눌렀을 때 닫히는 영역 */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+
+        {/* 실제 카드 영역 */}
         <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{section} 구역 사물함</Text>
@@ -552,8 +555,16 @@ function LockerSectionModal({ section, visible, onClose, state, onReload }: Sect
             {themeKeys.map((key) => {
               const theme = STATUS_THEME[key];
               return (
-                <View key={key} style={[styles.legendChip, { backgroundColor: theme.bg, borderColor: theme.border }]}>
-                  <Text style={[styles.legendText, { color: theme.text }]}>{theme.label}</Text>
+                <View
+                  key={key}
+                  style={[
+                    styles.legendChip,
+                    { backgroundColor: theme.bg, borderColor: theme.border },
+                  ]}
+                >
+                  <Text style={[styles.legendText, { color: theme.text }]}>
+                    {theme.label}
+                  </Text>
                 </View>
               );
             })}
@@ -576,40 +587,50 @@ function LockerSectionModal({ section, visible, onClose, state, onReload }: Sect
           )}
 
           {state.status === 'loaded' && (
-            <View style={styles.modalBody}>
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                style={styles.modalScroll}
-                contentContainerStyle={styles.modalScrollContent}
-                nestedScrollEnabled
-              >
-                <View style={styles.lockersWrap}>
-                  {state.lockers.map((locker) => {
-                    const theme =
-                      STATUS_THEME[locker.status.toUpperCase() as keyof typeof STATUS_THEME] ?? STATUS_THEME.AVAILABLE;
-                    return (
-                      <View
-                        key={locker.id}
-                        style={[styles.lockerTile, { borderColor: theme.border, backgroundColor: theme.bg }]}
-                      >
-                        <Text style={[styles.lockerLabel, { color: theme.text }]}>{locker.label}</Text>
-                        <Text style={[styles.lockerStatus, { color: theme.text }]}>{theme.label}</Text>
-                        {locker.studentName ? (
-                          <>
-                            <Text style={styles.lockerMeta}>{locker.studentName}</Text>
-                            {locker.studentId ? (
-                              <Text style={styles.lockerMetaSecondary}>{locker.studentId}</Text>
-                            ) : null}
-                          </>
-                        ) : (
-                          <Text style={styles.lockerMetaSecondary}>신청자 없음</Text>
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
-              </ScrollView>
-            </View>
+            // 여기 높이가 있어야 스크롤이 보임
+            <ScrollView
+              style={styles.modalScroll}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 8 }}
+            >
+              <View style={styles.lockersWrap}>
+                {state.lockers.map((locker) => {
+                  const theme =
+                    STATUS_THEME[
+                      locker.status.toUpperCase() as keyof typeof STATUS_THEME
+                    ] ?? STATUS_THEME.AVAILABLE;
+
+                  return (
+                    <View
+                      key={locker.id}
+                      style={[
+                        styles.lockerTile,
+                        { borderColor: theme.border, backgroundColor: theme.bg },
+                      ]}
+                    >
+                      <Text style={[styles.lockerLabel, { color: theme.text }]}>
+                        {locker.label}
+                      </Text>
+                      <Text style={[styles.lockerStatus, { color: theme.text }]}>
+                        {theme.label}
+                      </Text>
+                      {locker.studentName ? (
+                        <>
+                          <Text style={styles.lockerMeta}>{locker.studentName}</Text>
+                          {locker.studentId ? (
+                            <Text style={styles.lockerMetaSecondary}>
+                              {locker.studentId}
+                            </Text>
+                          ) : null}
+                        </>
+                      ) : (
+                        <Text style={styles.lockerMetaSecondary}>신청자 없음</Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            </ScrollView>
           )}
         </View>
       </View>
@@ -823,19 +844,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B7280',
   },
-  modalBackdrop: {
+    modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
     padding: 20,
     justifyContent: 'center',
   },
   modalCard: {
-    alignSelf: 'stretch',
     borderRadius: 24,
     backgroundColor: COLORS.surface,
     padding: 20,
-    maxHeight: '88%',
+    height: '88%',        // ✅ 고정 높이 다시 주기 (예: 80~90%)
     gap: 16,
+  },
+  modalScroll: {
+    flex: 1,              // ✅ 스크롤 영역이 카드 안에서 남은 공간을 다 쓰도록
   },
   modalHeader: {
     flexDirection: 'row',
@@ -860,15 +883,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-  },
-  modalBody: {
-    flex: 1,
-  },
-  modalScroll: {
-    flex: 1,
-  },
-  modalScrollContent: {
-    paddingBottom: 12,
   },
   modalLoading: {
     alignItems: 'center',

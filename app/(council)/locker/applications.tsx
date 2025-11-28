@@ -274,7 +274,6 @@ export default function LockerApplicationsScreen() {
               <View style={styles.scheduleHeader}>
                 <View style={{ gap: 4 }}>
                   <Text style={styles.scheduleTitle}>{item.semester} ({item.method})</Text>
-                  <Text style={styles.scheduleRange}>{formatDateTime(item.startAt)} ~ {formatDateTime(item.endAt)}</Text>
                 </View>
                 <View style={[
                   styles.statusChip,
@@ -418,7 +417,6 @@ function CreateScheduleModal({
   const [startAt, setStartAt] = useState<Date>(new Date());
   const [endAt, setEndAt] = useState<Date>(new Date(Date.now() + 1000 * 60 * 60 * 24));
   const [notes, setNotes] = useState('');
-  const [isOpen, setIsOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const handleConfirm = async () => {
@@ -434,7 +432,7 @@ function CreateScheduleModal({
       applicationType: method === '추가' ? 'LOCKER_ADDITIONAL' : 'LOCKER_MAIN',
       startAt: formatLocalDatePayload(startAt),
       endAt: formatLocalDatePayload(endAt),
-      isOpen,
+      isOpen: false,
       canAssign: true,
       notes: notes.trim() || undefined,
       applicants: [],
@@ -461,104 +459,117 @@ function CreateScheduleModal({
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>신청 일정 생성</Text>
-            <Pressable onPress={onClose} hitSlop={10}>
-              <Ionicons name="close" size={20} color={COLORS.text} />
-            </Pressable>
-          </View>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+          <View style={[styles.modalCard, styles.createModalCard]}>
+            <ScrollView
+              contentContainerStyle={styles.createScroll}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.createHero}>
+                <View style={styles.createHeroIcon}>
+                  <Ionicons name="calendar-clear-outline" size={18} color={COLORS.primary} />
+                </View>
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={styles.heroTitle}>신청 일정 생성</Text>
+                  <Text style={styles.heroSubtitle}>학기별 신청 공지를 세련되게 안내하세요.</Text>
+                </View>
+                <Pressable onPress={onClose} hitSlop={10} style={styles.modalCloseBtn}>
+                  <Ionicons name="close" size={18} color={COLORS.text} />
+                </Pressable>
+              </View>
 
-          <View style={styles.formField}>
-            <Text style={styles.formLabel}>학기</Text>
-            <TextInput
-              placeholder="예: 2025-1"
-              value={semester}
-              onChangeText={setSemester}
-              style={styles.formInput}
-            />
-          </View>
+              <View style={styles.fieldCard}>
+                <View style={styles.formField}>
+                  <Text style={styles.formLabel}>학기</Text>
+                  <TextInput
+                    placeholder="예: 2025-1"
+                    value={semester}
+                    onChangeText={setSemester}
+                    style={[styles.formInput, styles.elevatedInput]}
+                  />
+                  <Text style={styles.inputHelper}>예: 2025-1 / 2025-2</Text>
+                </View>
 
-          <View style={styles.formField}>
-            <Text style={styles.formLabel}>신청 방식</Text>
-            <View style={styles.methodRow}>
-              {(['정기', '추가'] as const).map(option => (
+                <View style={styles.divider} />
+
+                <View style={styles.formField}>
+                  <View style={styles.labelRow}>
+                    <Text style={styles.formLabel}>신청 방식</Text>
+                    <Text style={styles.labelHint}>정기/추가 공지를 명확하게 구분하세요.</Text>
+                  </View>
+                  <View style={styles.methodRow}>
+                    {(['정기', '추가'] as const).map(option => (
+                      <Pressable
+                        key={option}
+                        onPress={() => setMethod(option)}
+                        style={[
+                          styles.methodChip,
+                          method === option && styles.methodChipActive,
+                        ]}
+                      >
+                        <View style={styles.methodChipInner}>
+                          <Ionicons
+                            name={option === '정기' ? 'calendar-outline' : 'flash-outline'}
+                            size={16}
+                            color={method === option ? '#FFFFFF' : '#6B7280'}
+                          />
+                          <Text
+                            style={[
+                              styles.methodChipLabel,
+                              method === option && styles.methodChipLabelActive,
+                            ]}
+                          >
+                            {option}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.divider} />
+
+                <View style={styles.formField}>
+                  <View style={styles.labelRow}>
+                    <Text style={styles.formLabel}>신청 기간</Text>
+                    <Text style={styles.labelHint}>시작/종료 시간을 정확히 입력하세요.</Text>
+                  </View>
+                  <View style={styles.datetimeRow}>
+                    <DateInput label="시작" value={startAt} onChange={setStartAt} />
+                    <DateInput label="종료" value={endAt} onChange={setEndAt} />
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.noteCard}>
+                <View style={{ gap: 4 }}>
+                  <Text style={styles.formLabel}>알림 메모</Text>
+                  <Text style={styles.labelHint}>필요 시 신청자에게 노출될 문구를 추가하세요.</Text>
+                </View>
+                <TextInput
+                  placeholder="필요한 안내 사항을 입력하세요."
+                  value={notes}
+                  onChangeText={setNotes}
+                  style={[styles.formInput, styles.formTextarea, styles.noteInput]}
+                  multiline
+                />
+              </View>
+
+              <View style={styles.modalActions}>
                 <Pressable
-                  key={option}
-                  onPress={() => setMethod(option)}
-                  style={[
-                    styles.methodChip,
-                    method === option && styles.methodChipActive,
+                  onPress={handleConfirm}
+                  disabled={submitting}
+                  style={({ pressed }) => [
+                    styles.modalConfirm,
+                    pressed && !submitting && { opacity: 0.9 },
+                    submitting && { opacity: 0.7 },
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.methodChipLabel,
-                      method === option && styles.methodChipLabelActive,
-                    ]}
-                  >
-                    {option}
-                  </Text>
+                  <Text style={styles.modalConfirmText}>{submitting ? '생성 중...' : '생성'}</Text>
                 </Pressable>
-              ))}
-            </View>
+              </View>
+            </ScrollView>
           </View>
-
-          <View style={styles.formField}>
-            <Text style={styles.formLabel}>신청 기간</Text>
-            <View style={styles.datetimeRow}>
-              <DateInput label="시작" value={startAt} onChange={setStartAt} />
-              <DateInput label="종료" value={endAt} onChange={setEndAt} />
-            </View>
-          </View>
-
-          <View style={styles.formField}>
-            <Text style={styles.formLabel}>알림 메모</Text>
-            <TextInput
-              placeholder="필요한 안내 사항을 입력하세요."
-              value={notes}
-              onChangeText={setNotes}
-              style={[styles.formInput, styles.formTextarea]}
-              multiline
-            />
-          </View>
-
-          <Pressable
-            onPress={() => setIsOpen(prev => !prev)}
-            style={({ pressed }) => [
-              styles.toggleRow,
-              pressed && { opacity: 0.85 },
-            ]}
-          >
-            <Ionicons
-              name={isOpen ? 'checkbox' : 'square-outline'}
-              size={20}
-              color={COLORS.primary}
-            />
-            <Text style={styles.toggleLabel}>바로 신청 열기</Text>
-          </Pressable>
-
-          <View style={styles.modalActions}>
-            <Pressable
-              onPress={onClose}
-              disabled={submitting}
-              style={({ pressed }) => [styles.modalCancel, pressed && !submitting && { opacity: 0.8 }]}
-            >
-              <Text style={styles.modalCancelText}>취소</Text>
-            </Pressable>
-            <Pressable
-              onPress={handleConfirm}
-              disabled={submitting}
-              style={({ pressed }) => [
-                styles.modalConfirm,
-                pressed && !submitting && { opacity: 0.9 },
-                submitting && { opacity: 0.7 },
-              ]}
-            >
-              <Text style={styles.modalConfirmText}>{submitting ? '생성 중...' : '생성'}</Text>
-            </Pressable>
-          </View>
-        </View>
         </View>
       </TouchableWithoutFeedback>
     </Modal>
@@ -1026,11 +1037,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.text,
   },
-  scheduleRange: {
-    fontFamily: 'Pretendard-Medium',
-    fontSize: 13,
-    color: '#6B7280',
-  },
   statusChip: {
     paddingHorizontal: 14,
     paddingVertical: 6,
@@ -1110,7 +1116,7 @@ const styles = StyleSheet.create({
   metaValue: {
     fontFamily: 'Pretendard-Medium',
     fontSize: 13,
-    color: COLORS.text,
+    color: '#111827',
   },
   scheduleActions: {
     flexDirection: 'row',
@@ -1289,6 +1295,20 @@ const styles = StyleSheet.create({
     maxHeight: '90%',
     width: '100%',
   },
+  createModalCard: {
+    padding: 0,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 12,
+  },
+  createScroll: {
+    padding: 18,
+    gap: 14,
+  },
   modalScroll: {
     paddingHorizontal: 18,
     paddingTop: 18,
@@ -1316,13 +1336,52 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: COLORS.text,
   },
+  createHero: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 10,
+    borderRadius: 16,
+    backgroundColor: '#F4F6FF',
+  },
+  createHeroIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E0E7FF',
+  },
+  heroTitle: {
+    fontFamily: 'Pretendard-Bold',
+    fontSize: 18,
+    color: COLORS.text,
+  },
+  heroSubtitle: {
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  fieldCard: {
+    gap: 14,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E7EAF2',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
   formField: {
     gap: 6,
   },
   formLabel: {
     fontFamily: 'Pretendard-SemiBold',
     fontSize: 13,
-    color: '#4B5563',
+    color: '#1F2937',
   },
   formInput: {
     borderWidth: 1,
@@ -1335,9 +1394,32 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     backgroundColor: '#FFFFFF',
   },
+  elevatedInput: {
+    backgroundColor: '#F8FAFF',
+    borderColor: '#E5E7EB',
+  },
   formTextarea: {
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  inputHelper: {
+    fontFamily: 'Pretendard-Regular',
+    fontSize: 12,
+    color: '#9CA3AF',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#EEF2F7',
+  },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  labelHint: {
+    fontFamily: 'Pretendard-Medium',
+    fontSize: 12,
+    color: '#94A3B8',
   },
   methodRow: {
     flexDirection: 'row',
@@ -1345,17 +1427,30 @@ const styles = StyleSheet.create({
   },
   methodChip: {
     flex: 1,
-    alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F8FAFF',
+    gap: 6,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   methodChipActive: {
     borderColor: COLORS.primary,
-    backgroundColor: '#E0EBFF',
+    backgroundColor: COLORS.primary,
+    shadowOpacity: 0.12,
+    elevation: 6,
+  },
+  methodChipInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   methodChipLabel: {
     fontFamily: 'Pretendard-SemiBold',
@@ -1363,7 +1458,7 @@ const styles = StyleSheet.create({
     color: '#4B5563',
   },
   methodChipLabelActive: {
-    color: COLORS.primary,
+    color: '#FFFFFF',
   },
   datetimeRow: {
     flexDirection: 'row',
@@ -1381,17 +1476,24 @@ const styles = StyleSheet.create({
   dateInputBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    gap: 10,
+    height: 52,
+    paddingHorizontal: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   dateInputValue: {
+    flex: 1,
     fontFamily: 'Pretendard-Medium',
     fontSize: 13,
+    lineHeight: 18,
     color: COLORS.text,
   },
   pickerContainer: {
@@ -1442,16 +1544,17 @@ const styles = StyleSheet.create({
   pickerActionPrimaryText: {
     color: '#FFFFFF',
   },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  noteCard: {
     gap: 8,
-    paddingVertical: 4,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: '#F7F8FA',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  toggleLabel: {
-    fontFamily: 'Pretendard-SemiBold',
-    fontSize: 13,
-    color: COLORS.text,
+  noteInput: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E7EB',
   },
   modalActions: {
     flexDirection: 'row',
@@ -1464,8 +1567,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F8FAFF',
   },
   modalCancelText: {
     fontFamily: 'Pretendard-SemiBold',
